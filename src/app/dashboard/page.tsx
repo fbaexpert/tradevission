@@ -281,7 +281,7 @@ export default function Dashboard() {
 
   const copyReferralLink = () => {
     const { protocol, host } = window.location;
-    const origin = `${protocol}//${host.replace('6000', '9000')}`;
+    const origin = `${protocol}//${host}`;
     const link = `${origin}/?ref=${userData.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Referral Link Copied!", description: "Share it with your friends to build your team." });
