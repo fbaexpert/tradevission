@@ -6,7 +6,7 @@ import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAz5gy2gkgEllMxC8roSx4smnLpls2zbjo",
-  authDomain: "tradevision-82417.firebaseapp.com",
+  authDomain: "tradevission.online",
   projectId: "tradevision-82417",
   storageBucket: "tradevision-82417.appspot.com",
   messagingSenderId: "444475824634",
