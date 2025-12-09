@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default deny: No one can read or write anything by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Allow users to upload their own deposit screenshots.
+    // They can write to a path that includes their user ID.
+    // They can't read/list other users' files.
+    match /deposit_screenshots/{userId}/{depositId} {
+      allow create, write: if request.auth != null && request.auth.uid == userId;
+      // Also allow admins to update/delete if necessary
+      allow update, delete: if request.auth != null && request.auth.token.isAdmin == true;
+    }
+
+    // Admins can read any deposit screenshot.
+    // This assumes you have a custom claim 'isAdmin' set to true on the admin's token.
+    // You would typically set this using a backend function or the Firebase Admin SDK.
+    match /deposit_screenshots/{userId}/{depositId} {
+       allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.isAdmin == true);
+    }
+
+     match /uploadErrors/{document=**} {
+      allow create: if request.auth != null;
+    }
+
+    match /kyc_documents/{userId}/{document} {
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.isAdmin == true);
+    }
+  }
+}

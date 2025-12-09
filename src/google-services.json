@@ -1,0 +1,30 @@
+{
+    "project_info": {
+      "project_number": "444475824634",
+      "firebase_url": "https://tradevision-82417-default-rtdb.firebaseio.com",
+      "project_id": "tradevision-82417",
+      "storage_bucket": "tradevision-82417.firebasestorage.app"
+    },
+    "client": [
+      {
+        "client_info": {
+          "mobilesdk_app_id": "1:444475824634:android:df281f84a4bc32376a6c43",
+          "android_client_info": {
+            "package_name": "online.tradevission"
+          }
+        },
+        "oauth_client": [],
+        "api_key": [
+          {
+            "current_key": "AIzaSyDZK7SMGceD7Wr8eFCwfnIxPhCV7Ay_nbQ"
+          }
+        ],
+        "services": {
+          "appinvite_service": {
+            "other_platform_oauth_client": []
+          }
+        }
+      }
+    ],
+    "configuration_version": "1"
+  }

@@ -1,0 +1,107 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :root {
+    --background: 224 71.4% 6%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 8%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 89% 53%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 210 89% 63%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 210 89% 53%;
+    --chart-1: 210 89% 53%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 210 89% 63%;
+    --chart-4: 38 92% 65%;
+    --chart-5: 210 89% 73%;
+    --radius: 0.8rem;
+
+    /* Custom Notification Panel Colors */
+    --notification-bg: 220 13% 97%; /* Light Gray */
+    --notification-border: 220 13% 90%;
+    --notification-title-text: 220 13% 10%; /* Almost Black */
+    --notification-message-text: 220 13% 30%;
+
+    /* Dark Sidebar variables */
+    --sidebar-background: 224 71.4% 6.1%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 210 89% 53%;
+    --sidebar-primary-foreground: 210 20% 98%;
+    --sidebar-accent: 217.2 32.6% 22.5%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 217.2 32.6% 12.5%;
+    --sidebar-ring: 210 89% 53%;
+  }
+
+  .dark {
+    --background: 224 71.4% 6%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 8%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 89% 53%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 210 89% 63%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 210 89% 53%;
+    --chart-1: 210 89% 53%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 210 89% 63%;
+    --chart-4: 38 92% 65%;
+    --chart-5: 210 89% 73%;
+    --radius: 0.8rem;
+
+    /* Custom Notification Panel Colors */
+    --notification-bg: 222.2 84% 4.9%; 
+    --notification-border: 217.2 32.6% 17.5%;
+    --notification-title-text: 210 40% 98%;
+    --notification-message-text: 215 20.2% 65.1%;
+
+    /* Dark Sidebar variables */
+    --sidebar-background: 224 71.4% 6.1%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 210 89% 53%;
+    --sidebar-primary-foreground: 210 20% 98%;
+    --sidebar-accent: 217.2 32.6% 22.5%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 217.2 32.6% 12.5%;
+    --sidebar-ring: 210 89% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
