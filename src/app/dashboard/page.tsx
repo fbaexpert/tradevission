@@ -52,6 +52,7 @@ interface UserPlan {
     dailyReward: number;
     durationDays: number;
     daysCompleted: number;
+    startDate: Timestamp;
     lastClaimTimestamp?: Timestamp;
     status: 'active' | 'expired';
 }
@@ -75,10 +76,26 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
     const [timeLeft, setTimeLeft] = useState<string | null>(null);
     const [canWatchAd, setCanWatchAd] = useState(false);
 
-    const daysCompleted = plan.daysCompleted || 0;
-    const durationDays = plan.durationDays || 1;
-    const daysLeft = Math.max(0, durationDays - daysCompleted);
-    const progressValue = durationDays > 0 ? (daysCompleted / durationDays) * 100 : 0;
+    const { daysCompleted, daysLeft, progressValue } = useMemo(() => {
+        if (!plan.startDate) {
+            return { daysCompleted: 0, daysLeft: plan.durationDays, progressValue: 0 };
+        }
+        const now = new Date();
+        const start = plan.startDate.toDate();
+        const timeDiff = now.getTime() - start.getTime();
+        const completed = Math.floor(timeDiff / (1000 * 3600 * 24));
+        const duration = plan.durationDays || 1;
+
+        const actualDaysCompleted = Math.max(0, Math.min(completed, duration));
+        const actualDaysLeft = Math.max(0, duration - actualDaysCompleted);
+        const progress = duration > 0 ? (actualDaysCompleted / duration) * 100 : 0;
+        
+        return {
+            daysCompleted: actualDaysCompleted,
+            daysLeft: actualDaysLeft,
+            progressValue: progress
+        };
+    }, [plan.startDate, plan.durationDays]);
     
     useEffect(() => {
         const calculateTimeLeft = () => {
