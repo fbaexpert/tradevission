@@ -94,18 +94,18 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Priority 1: Check URL parameter
+    // Robust referral ID detection
     const refIdFromUrl = searchParams.get('ref');
-    if (refIdFromUrl) {
-      localStorage.setItem('referralId', refIdFromUrl);
-      setReferralId(refIdFromUrl);
-      return; // Exit early if we found it in the URL
-    }
-
-    // Priority 2: Check localStorage as a fallback
     const refIdFromStorage = localStorage.getItem('referralId');
-    if (refIdFromStorage) {
-      setReferralId(refIdFromStorage);
+
+    const finalRefId = refIdFromUrl || refIdFromStorage;
+
+    if (finalRefId) {
+      setReferralId(finalRefId);
+      // If the ID came from the URL, ensure it's saved to localStorage for persistence
+      if (refIdFromUrl) {
+        localStorage.setItem('referralId', refIdFromUrl);
+      }
     }
   }, [searchParams]);
 
@@ -120,6 +120,10 @@ export default function AuthForm() {
                 localStorage.removeItem('referralId');
                 setReferralId(null);
             }
+        }).catch(() => {
+             // Handle potential errors fetching the doc
+            localStorage.removeItem('referralId');
+            setReferralId(null);
         });
     }
   }, [referralId, db]);

@@ -38,7 +38,13 @@ export default function LandingPage() {
       // Create a login link that carries the referral ID forward
       setLoginHref(`/login?ref=${refId}`);
     } else {
-      setLoginHref("/login");
+      // If no ref in URL, check if one exists in localStorage from a previous visit
+      const storedRefId = localStorage.getItem('referralId');
+      if (storedRefId) {
+        setLoginHref(`/login?ref=${storedRefId}`);
+      } else {
+        setLoginHref("/login");
+      }
     }
   }, [searchParams]);
 
