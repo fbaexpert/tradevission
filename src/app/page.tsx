@@ -7,6 +7,8 @@ import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { Footer } from "@/components/shared/footer";
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -25,6 +27,16 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 
 
 export default function LandingPage() {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const refId = searchParams.get('ref');
+    if (refId) {
+      // Store the referral ID in localStorage to persist it across navigation
+      localStorage.setItem('referralId', refId);
+    }
+  }, [searchParams]);
+
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
       {/* Header */}
