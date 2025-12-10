@@ -2,7 +2,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
@@ -13,15 +12,15 @@ import { useSearchParams } from "next/navigation";
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-     <CardHeader className="relative z-10 p-0 mb-4">
-      <div className="mx-auto bg-primary/10 p-3 rounded-full border border-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-primary/20">
+     <div className="relative z-10 p-0 mb-4 text-center">
+      <div className="inline-block bg-primary/10 p-3 rounded-full border border-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-primary/20">
         <Icon className="h-8 w-8 text-primary" />
       </div>
-    </CardHeader>
-    <CardContent className="relative z-10 p-0 text-center">
+    </div>
+    <div className="relative z-10 p-0 text-center">
       <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
       <p className="text-muted-foreground">{description}</p>
-    </CardContent>
+    </div>
   </div>
 );
 
@@ -33,13 +32,12 @@ export default function LandingPage() {
   useEffect(() => {
     const refId = searchParams.get('ref');
     let finalHref = "/login";
-    let storedRefId: string | null = null;
-
+    
     if (refId) {
-      localStorage.setItem('referralId', refId);
+      localStorage.setItem('tradevission_ref', refId);
       finalHref = `/login?ref=${refId}`;
     } else {
-      storedRefId = localStorage.getItem('referralId');
+      const storedRefId = localStorage.getItem('tradevission_ref');
       if (storedRefId) {
         finalHref = `/login?ref=${storedRefId}`;
       }

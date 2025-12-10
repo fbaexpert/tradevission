@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import Loader from "@/components/shared/loader";
@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, LogIn, UserPlus, LoaderCircle, Users, Mail, Phone } from "lucide-react";
+import { AlertCircle, LogIn, UserPlus, LoaderCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TermsDialog } from "./terms-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -43,7 +43,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useFirebase } from "@/lib/firebase/provider";
-
 
 const signUpSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -98,14 +97,14 @@ export default function AuthForm() {
 
   useEffect(() => {
     const refIdFromUrl = searchParams.get('ref');
-    const refIdFromStorage = localStorage.getItem('tradevission_ref');
-    const finalRefId = refIdFromUrl || refIdFromStorage;
-
-    if (finalRefId) {
-      setReferralId(finalRefId);
-      if (finalRefId !== refIdFromStorage) {
-        localStorage.setItem('tradevission_ref', finalRefId);
-      }
+    if (refIdFromUrl) {
+        localStorage.setItem('tradevission_ref', refIdFromUrl);
+        setReferralId(refIdFromUrl);
+    } else {
+        const refIdFromStorage = localStorage.getItem('tradevission_ref');
+        if (refIdFromStorage) {
+            setReferralId(refIdFromStorage);
+        }
     }
   }, [searchParams]);
 
@@ -116,17 +115,20 @@ export default function AuthForm() {
         if (docSnap.exists()) {
           setReferrerName(docSnap.data().name);
         } else {
+          // If referrer ID is invalid, clear it to avoid issues
           localStorage.removeItem('tradevission_ref');
           setReferralId(null);
           setReferrerName(null);
         }
       }).catch(() => {
+        // Handle potential errors fetching referrer
         localStorage.removeItem('tradevission_ref');
         setReferralId(null);
         setReferrerName(null);
       });
     }
   }, [referralId, db]);
+
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -188,114 +190,114 @@ export default function AuthForm() {
     setLoading(true);
     setError(null);
     if (!auth || !db) return;
-    
+
     try {
-        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-        const user = userCredential.user;
-
-        await updateProfile(user, { displayName: values.name });
+      // --- Read settings BEFORE the transaction ---
+      let commanderSettings: CommanderSettings | undefined;
+      let bonusTiers: SuperBonusTier[] = [];
+      const settingsDocRef = doc(db, "system", "settings");
+      const settingsDoc = await getDoc(settingsDocRef);
+      if (settingsDoc.exists()) {
+        const settingsData = settingsDoc.data();
+        commanderSettings = settingsData.commander;
+        bonusTiers = settingsData.superBonusTiers || [];
+      }
       
-        // --- Read settings BEFORE the transaction ---
-        let commanderSettings: CommanderSettings | undefined;
-        let bonusTiers: SuperBonusTier[] = [];
-        const settingsDocRef = doc(db, "system", "settings");
-        const settingsDoc = await getDoc(settingsDocRef);
-        if (settingsDoc.exists()) {
-            const settingsData = settingsDoc.data();
-            commanderSettings = settingsData.commander;
-            bonusTiers = settingsData.superBonusTiers || [];
+      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      const user = userCredential.user;
+
+      await updateProfile(user, { displayName: values.name });
+      
+      // --- Execute atomic writes in a transaction ---
+      await runTransaction(db, async (transaction) => {
+        const finalReferralId = referralId; // Use state variable
+        let ipAddress = 'N/A';
+        let deviceInfo = 'N/A';
+        try {
+          const response = await fetch('https://api.ipify.org?format=json');
+          const data = await response.json();
+          ipAddress = data.ip;
+          deviceInfo = navigator.userAgent;
+        } catch (e) {
+          console.error("Could not fetch IP/device info:", e);
         }
+
+        const newUserRef = doc(db, "users", user.uid);
+        const userData: any = {
+          name: values.name, email: values.email, phone: values.phone,
+          createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
+          withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
+          depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
+          totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
+          ipAddress: ipAddress, deviceInfo: deviceInfo,
+        };
         
-        // --- Execute atomic writes in a transaction ---
-        await runTransaction(db, async (transaction) => {
-            const finalReferralId = referralId;
-            let ipAddress = 'N/A';
-            let deviceInfo = 'N/A';
-            try {
-                const response = await fetch('https://api.ipify.org?format=json');
-                const data = await response.json();
-                ipAddress = data.ip;
-                deviceInfo = navigator.userAgent;
-            } catch (e) {
-                console.error("Could not fetch IP/device info:", e);
+        if (finalReferralId) {
+          const referrerRef = doc(db, "users", finalReferralId);
+          const referrerDoc = await transaction.get(referrerRef);
+          if (!referrerDoc.exists()) {
+            throw new Error("Invalid referral code. Please check the link and try again.");
+          }
+          
+          userData.referredBy = finalReferralId;
+          const referrerData = referrerDoc.data();
+          const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
+
+          transaction.update(referrerRef, { totalTeamMembers: increment(1) });
+          
+          // Check for Commander promotion
+          if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
+            transaction.update(referrerRef, { isCommander: true });
+          }
+
+          // Check for Super Bonus Tiers
+          const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
+          for (const tier of bonusTiers) {
+            if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
+              transaction.update(referrerRef, {
+                balance0: increment(tier.bonus),
+                awardedSuperBonuses: [...awardedBonuses, tier.referrals]
+              });
             }
+          }
+        }
+        transaction.set(newUserRef, userData);
+      });
+    
+      // Post-transaction notifications can be done in a batch
+      if (referralId) {
+        const batch = writeBatch(db);
+        const referrerRef = doc(db, "users", referralId);
+        const referrerDoc = await getDoc(referrerRef);
+        
+        if (referrerDoc.exists()) {
+            const referrerData = referrerDoc.data();
+            const newTeamCount = (referrerData.totalTeamMembers || 0);
 
-            const newUserRef = doc(db, "users", user.uid);
-            const userData: any = {
-                name: values.name, email: values.email, phone: values.phone,
-                createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
-                withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
-                depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
-                totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
-                ipAddress: ipAddress, deviceInfo: deviceInfo,
-            };
-            
-            if (finalReferralId) {
-                const referrerRef = doc(db, "users", finalReferralId);
-                const referrerDoc = await transaction.get(referrerRef);
-                if (!referrerDoc.exists()) {
-                    throw new Error("Invalid referral code. Please check the link and try again.");
-                }
-                
-                userData.referredBy = finalReferralId;
-                const referrerData = referrerDoc.data();
-                const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
-
-                transaction.update(referrerRef, { totalTeamMembers: increment(1) });
-                
-                // Check for Commander promotion
-                if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
-                    transaction.update(referrerRef, { isCommander: true });
-                }
-
-                // Check for Super Bonus Tiers
-                const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
-                for (const tier of bonusTiers) {
-                    if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
-                        transaction.update(referrerRef, {
-                            balance0: increment(tier.bonus),
-                            awardedSuperBonuses: [...awardedBonuses, tier.referrals]
-                        });
-                    }
-                }
+            if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
+                const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                batch.set(notifRef, {
+                    userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
+                    message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
+                    status: 'unread', seen: false, createdAt: serverTimestamp(),
+                });
             }
-            transaction.set(newUserRef, userData);
-        });
-      
-        // --- Post-transaction notifications ---
-        if (referralId) {
-            const batch = writeBatch(db);
-            const referrerRef = doc(db, "users", referralId);
-            const referrerDoc = await getDoc(referrerRef);
-            
-            if (referrerDoc.exists()) {
-                const referrerData = referrerDoc.data();
-                const newTeamCount = (referrerData.totalTeamMembers || 0);
-
-                if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
+            for (const tier of bonusTiers) {
+                if (newTeamCount === tier.referrals) {
                     const notifRef = doc(collection(db, "users", referralId, "notifications"));
                     batch.set(notifRef, {
-                        userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
-                        message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
-                        status: 'unread', seen: false, createdAt: serverTimestamp(),
+                        userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
+                        message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
+                        amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
                     });
                 }
-                for (const tier of bonusTiers) {
-                    if (newTeamCount === tier.referrals) {
-                        const notifRef = doc(collection(db, "users", referralId, "notifications"));
-                        batch.set(notifRef, {
-                            userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
-                            message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
-                            amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
-                        });
-                    }
-                }
-                await batch.commit();
             }
+            await batch.commit();
         }
+      }
 
-        localStorage.removeItem('tradevission_ref');
-        router.push("/dashboard");
+      localStorage.removeItem('tradevission_ref');
+      router.push("/dashboard");
 
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
@@ -539,9 +541,8 @@ export default function AuthForm() {
                     {resetLoading ? (
                         <LoaderCircle className="animate-spin" />
                     ) : (
-                        <Mail />
+                       "Send Reset Link"
                     )}
-                    <span>Send Reset Link</span>
                     </Button>
                  </DialogFooter>
               </form>
