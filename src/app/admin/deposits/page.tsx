@@ -164,15 +164,18 @@ export default function AdminDepositsPage() {
           const bonusAmount = deposit.amount * 0.15;
           batch.set(referrerNotifRef, {
               userId: userData.referredBy, type: 'success', title: '🎉 Referral Bonus!',
-              message: `You earned a $${bonusAmount.toFixed(2)} bonus from your referral ${userData.name}'s first deposit.`,
+              message: `You earned a $${bonusAmount.toFixed(2)} bonus from your referral ${userData.name || 'friend'}'s first deposit.`,
               amount: bonusAmount, status: 'unread', seen: false, createdAt: serverTimestamp(),
           });
       }
 
       batch.set(doc(collection(db, "activityLogs")), {
-          userId: deposit.uid, action: `deposit_${newStatus}`,
-          details: `Admin ${newStatus} deposit of $${deposit.amount.toFixed(2)}`,
+          userId: 'ADMIN',
+          relatedUserId: deposit.uid,
+          action: `deposit_${newStatus}`,
+          details: `Admin ${newStatus} deposit of $${deposit.amount.toFixed(2)} for user ${deposit.email}.`,
           timestamp: serverTimestamp(),
+          relatedId: deposit.id,
       });
       
       await batch.commit();
@@ -182,12 +185,12 @@ export default function AdminDepositsPage() {
           description: `Status changed to ${newStatus}.`,
       });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error updating deposit status:", error);
         toast({
             variant: "destructive",
             title: "Update Failed",
-            description: "An error occurred while updating the request.",
+            description: error.message || "An error occurred while updating the request.",
         });
     } finally {
         setUpdatingId(null);

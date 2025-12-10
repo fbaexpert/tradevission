@@ -96,13 +96,16 @@ export default function AuthForm() {
   useEffect(() => {
     // Robust referral ID detection
     const refIdFromUrl = searchParams.get('ref');
-    const refIdFromStorage = localStorage.getItem('referralId');
+    let finalRefId = refIdFromUrl;
 
-    const finalRefId = refIdFromUrl || refIdFromStorage;
+    if (!finalRefId) {
+      // If not in URL, check localStorage as a fallback
+      finalRefId = localStorage.getItem('referralId');
+    }
 
     if (finalRefId) {
       setReferralId(finalRefId);
-      // If the ID came from the URL, ensure it's saved to localStorage for persistence
+      // Ensure localStorage is updated if the URL has a new ref
       if (refIdFromUrl) {
         localStorage.setItem('referralId', refIdFromUrl);
       }

@@ -123,13 +123,10 @@ export default function AdPage() {
             }
             if (dailyReward <= 0) throw new Error("No valid daily reward amount for this plan.");
 
-            const newDaysCompleted = (planData.daysCompleted || 0) + 1;
-            const isPlanNowExpired = newDaysCompleted >= planData.durationDays;
-            
+            // This counter is not used for daysLeft calculation but for ad watching record
             transaction.update(userPlanDocRef, {
                 daysCompleted: increment(1),
                 lastClaimTimestamp: serverTimestamp(),
-                status: isPlanNowExpired ? 'expired' : 'active',
             });
             transaction.update(userDocRef, { balance0: increment(dailyReward) });
             
@@ -171,7 +168,7 @@ export default function AdPage() {
         if (currentUserData?.referredBy && teamBonus > 0) {
             batch.set(doc(collection(db, "users", currentUserData.referredBy, "notifications")), {
                 userId: currentUserData.referredBy, type: 'success', title: '💸 Team Bonus!',
-                message: `You earned a $${teamBonus.toFixed(2)} bonus from your team member ${currentUserData.name}'s daily task.`,
+                message: `You earned a $${teamBonus.toFixed(2)} bonus from your team member ${currentUserData.name || 'friend'}'s daily task.`,
                 amount: teamBonus, status: 'unread', seen: false, createdAt: serverTimestamp(), relatedId: user.uid,
             });
         }
