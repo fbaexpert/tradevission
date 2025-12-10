@@ -33,18 +33,9 @@ export default function LandingPage() {
   useEffect(() => {
     const refId = searchParams.get('ref');
     if (refId) {
-      // Store the referral ID in localStorage as a backup
-      localStorage.setItem('referralId', refId);
-      // Create a login link that carries the referral ID forward
       setLoginHref(`/login?ref=${refId}`);
-    } else {
-      // If no ref in URL, check if one exists in localStorage from a previous visit
-      const storedRefId = localStorage.getItem('referralId');
-      if (storedRefId) {
-        setLoginHref(`/login?ref=${storedRefId}`);
-      } else {
-        setLoginHref("/login");
-      }
+      // Also save to localStorage as a fallback
+      localStorage.setItem('referralId', refId);
     }
   }, [searchParams]);
 
