@@ -95,16 +95,31 @@ export default function AuthForm() {
 
   useEffect(() => {
     const refId = searchParams.get('ref');
-    if(refId && db) {
+    if (refId) {
+        localStorage.setItem('referralId', refId);
         setReferralId(refId);
-        const referrerDocRef = doc(db, "users", refId);
+    } else {
+        const storedRefId = localStorage.getItem('referralId');
+        if (storedRefId) {
+            setReferralId(storedRefId);
+        }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if(referralId && db) {
+        const referrerDocRef = doc(db, "users", referralId);
         getDoc(referrerDocRef).then(docSnap => {
             if (docSnap.exists()) {
                 setReferrerName(docSnap.data().name);
+            } else {
+                // Invalid referrer, clear it
+                localStorage.removeItem('referralId');
+                setReferralId(null);
             }
         });
     }
-  }, [searchParams, db]);
+  }, [referralId, db]);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -223,15 +238,16 @@ export default function AuthForm() {
         deviceInfo: deviceInfo,
       };
 
-      if (referralId) {
-          userData.referredBy = referralId;
+      const finalReferralId = localStorage.getItem('referralId');
+      if (finalReferralId) {
+          userData.referredBy = finalReferralId;
       }
 
       batch.set(doc(db, "users", user.uid), userData);
 
       // If referred, update the referrer's team members count and check for bonuses
-      if (referralId && referrerDoc) {
-          const referrerRef = doc(db, "users", referralId);
+      if (finalReferralId && referrerDoc) {
+          const referrerRef = doc(db, "users", finalReferralId);
           batch.update(referrerRef, {
               totalTeamMembers: increment(1)
           });
@@ -251,9 +267,9 @@ export default function AuthForm() {
                   batch.update(referrerRef, { isCommander: true });
                   
                   // Send Commander promotion notification
-                  const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                  const notifRef = doc(collection(db, "users", finalReferralId, "notifications"));
                   batch.set(notifRef, {
-                      userId: referralId,
+                      userId: finalReferralId,
                       type: 'success',
                       title: '🏆 Rank Promotion: Commander!',
                       message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
@@ -276,9 +292,9 @@ export default function AuthForm() {
                       });
 
                       // Create notification
-                      const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                      const notifRef = doc(collection(db, "users", finalReferralId, "notifications"));
                       batch.set(notifRef, {
-                        userId: referralId,
+                        userId: finalReferralId,
                         type: 'success',
                         title: '🏆 Super Bonus Unlocked!',
                         message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
@@ -293,6 +309,7 @@ export default function AuthForm() {
       }
 
       await batch.commit();
+      localStorage.removeItem('referralId'); // Clear after successful signup
       router.push("/dashboard");
 
     } catch (err: any) {

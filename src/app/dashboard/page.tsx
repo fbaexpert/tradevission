@@ -296,7 +296,6 @@ export default function Dashboard() {
   }
 
   const copyReferralLink = () => {
-    // This generates the link for your custom domain
     const link = `https://tradevission.online/?ref=${userData.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Referral Link Copied!", description: "Share it with your friends to build your team." });
