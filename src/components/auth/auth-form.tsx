@@ -115,13 +115,11 @@ export default function AuthForm() {
         if (docSnap.exists()) {
           setReferrerName(docSnap.data().name);
         } else {
-          // If referrer ID is invalid, clear it to avoid issues
           localStorage.removeItem('tradevission_ref');
           setReferralId(null);
           setReferrerName(null);
         }
       }).catch(() => {
-        // Handle potential errors fetching referrer
         localStorage.removeItem('tradevission_ref');
         setReferralId(null);
         setReferrerName(null);
@@ -192,7 +190,6 @@ export default function AuthForm() {
     if (!auth || !db) return;
 
     try {
-      // --- Read settings BEFORE the transaction ---
       let commanderSettings: CommanderSettings | undefined;
       let bonusTiers: SuperBonusTier[] = [];
       const settingsDocRef = doc(db, "system", "settings");
@@ -208,9 +205,7 @@ export default function AuthForm() {
 
       await updateProfile(user, { displayName: values.name });
       
-      // --- Execute atomic writes in a transaction ---
       await runTransaction(db, async (transaction) => {
-        const finalReferralId = referralId; // Use state variable
         let ipAddress = 'N/A';
         let deviceInfo = 'N/A';
         try {
@@ -232,25 +227,23 @@ export default function AuthForm() {
           ipAddress: ipAddress, deviceInfo: deviceInfo,
         };
         
-        if (finalReferralId) {
-          const referrerRef = doc(db, "users", finalReferralId);
+        if (referralId) {
+          const referrerRef = doc(db, "users", referralId);
           const referrerDoc = await transaction.get(referrerRef);
           if (!referrerDoc.exists()) {
             throw new Error("Invalid referral code. Please check the link and try again.");
           }
           
-          userData.referredBy = finalReferralId;
+          userData.referredBy = referralId;
           const referrerData = referrerDoc.data();
           const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
 
           transaction.update(referrerRef, { totalTeamMembers: increment(1) });
           
-          // Check for Commander promotion
           if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
             transaction.update(referrerRef, { isCommander: true });
           }
 
-          // Check for Super Bonus Tiers
           const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
           for (const tier of bonusTiers) {
             if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
@@ -264,7 +257,6 @@ export default function AuthForm() {
         transaction.set(newUserRef, userData);
       });
     
-      // Post-transaction notifications can be done in a batch
       if (referralId) {
         const batch = writeBatch(db);
         const referrerRef = doc(db, "users", referralId);
@@ -283,7 +275,7 @@ export default function AuthForm() {
                 });
             }
             for (const tier of bonusTiers) {
-                if (newTeamCount === tier.referrals) {
+                if (newTeamCount === tier.referrals && !(referrerData.awardedSuperBonuses || []).includes(tier.referrals)) {
                     const notifRef = doc(collection(db, "users", referralId, "notifications"));
                     batch.set(notifRef, {
                         userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
