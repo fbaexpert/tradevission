@@ -229,7 +229,7 @@ export default function AuthForm() {
 
       batch.set(doc(db, "users", user.uid), userData);
 
-      // If referred, update the referrer's team members count
+      // If referred, update the referrer's team members count and check for bonuses
       if (referralId && referrerDoc) {
           const referrerRef = doc(db, "users", referralId);
           batch.update(referrerRef, {

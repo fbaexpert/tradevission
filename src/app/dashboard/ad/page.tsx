@@ -155,8 +155,9 @@ export default function AdPage() {
             transaction.update(userPlanDocRef, planUpdateData);
             transaction.update(userDocRef, { balance0: increment(dailyReward) });
             
+            // --- DAILY TEAM BONUS ---
             if (referrerDoc && referrerDoc.exists() && !referrerDoc.data()!.teamBonusPaused) {
-                const teamBonus = dailyReward * 0.10;
+                const teamBonus = dailyReward * 0.10; // 10% daily team bonus
                 transaction.update(referrerDoc.ref, {
                     balance0: increment(teamBonus),
                     totalTeamBonus: increment(teamBonus)

@@ -148,18 +148,21 @@ export default function AdminDepositsPage() {
         };
         batch.set(doc(activityLogCollectionRef), activityLogDoc);
 
+        // --- FIRST DEPOSIT REFERRAL BONUS ---
         if (newStatus === 'approved') {
             const userDoc = await getDoc(userDocRef);
             if (userDoc.exists()) {
                 const userData = userDoc.data();
+                // Check if user has a referrer AND this is their first deposit (`depositDone` is false before update)
                 if (userData.referredBy && !userData.depositDone) {
                     const referrerRef = doc(db, "users", userData.referredBy);
-                    const bonusAmount = deposit.amount * 0.15;
+                    const bonusAmount = deposit.amount * 0.15; // 15% bonus
                     batch.update(referrerRef, {
                         balance0: increment(bonusAmount),
                         totalReferralBonus: increment(bonusAmount)
                     });
                     
+                    // Send notification to referrer
                     const referrerNotifRef = doc(collection(db, "users", userData.referredBy, "notifications"));
                     batch.set(referrerNotifRef, {
                     userId: userData.referredBy,
@@ -172,6 +175,7 @@ export default function AdminDepositsPage() {
                     createdAt: serverTimestamp(),
                     });
                 }
+                // --- TEAM DEPOSIT UPDATE ---
                 if (userData.referredBy) {
                     const referrerRef = doc(db, "users", userData.referredBy);
                     batch.update(referrerRef, {
@@ -180,6 +184,7 @@ export default function AdminDepositsPage() {
                 }
             }
         }
+        // --- END REFERRAL BONUS LOGIC ---
 
         await batch.commit();
         
