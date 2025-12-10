@@ -3,11 +3,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useFirebase } from "@/lib/firebase/provider";
-
+import { useAuth } from "@/context/auth-context";
+import AuthForm from "@/components/auth/auth-form";
+import Loader from "@/components/shared/loader";
+import { Logo } from "@/components/shared/logo";
+import Link from "next/link";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -15,7 +15,6 @@ import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, getDoc, updateDoc, increment, collection, writeBatch, query, where, getDocs, runTransaction } from "firebase/firestore";
-
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -41,6 +40,11 @@ import { AlertCircle, LogIn, UserPlus, LoaderCircle, Users, Mail, Phone } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { TermsDialog } from "./terms-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useFirebase } from "@/lib/firebase/provider";
+
 
 const signUpSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -244,26 +248,26 @@ export default function AuthForm() {
             if (!referrerDoc.exists()) {
                 throw new Error("Invalid referral code. Please check the link and try again.");
             }
-
+            
+            const referrerData = referrerDoc.data();
+            
             transaction.update(referrerRef, {
                 totalTeamMembers: increment(1)
             });
-
-            const referrerData = referrerDoc.data();
-            const newTeamCount = (referrerData?.totalTeamMembers || 0) + 1;
+            const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
           
             const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef);
+            const settingsDoc = await getDoc(settingsDocRef); // Use getDoc, not transaction.get for non-transactional reads if possible
           
             if (settingsDoc.exists()) {
                 const settingsData = settingsDoc.data();
                 const commanderSettings: CommanderSettings | undefined = settingsData.commander;
-                if (commanderSettings && !referrerData?.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
+                if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
                     transaction.update(referrerRef, { isCommander: true });
                 }
 
                 const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
-                const awardedBonuses: number[] = referrerData?.awardedSuperBonuses || [];
+                const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
 
                 for (const tier of bonusTiers) {
                     if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
@@ -277,39 +281,43 @@ export default function AuthForm() {
         }
       });
       
+      // Post-transaction notifications
       if (referralId) {
         const batch = writeBatch(db);
         const referrerRef = doc(db, "users", referralId);
         const referrerDoc = await getDoc(referrerRef);
-        const referrerData = referrerDoc.data();
-        const newTeamCount = (referrerData?.totalTeamMembers || 0);
+        
+        if (referrerDoc.exists()) {
+            const referrerData = referrerDoc.data();
+            const newTeamCount = (referrerData.totalTeamMembers || 0);
 
-        const settingsDocRef = doc(db, "system", "settings");
-        const settingsDoc = await getDoc(settingsDocRef);
-        if (settingsDoc.exists()) {
-          const settingsData = settingsDoc.data();
-          const commanderSettings: CommanderSettings | undefined = settingsData.commander;
-          if (commanderSettings && referrerData?.isCommander && newTeamCount === commanderSettings.referralRequirement) {
-             const notifRef = doc(collection(db, "users", referralId, "notifications"));
-             batch.set(notifRef, {
-                userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
-                message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
-                status: 'unread', seen: false, createdAt: serverTimestamp(),
-             });
-          }
-          const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
-          for (const tier of bonusTiers) {
-            if (newTeamCount === tier.referrals) {
-              const notifRef = doc(collection(db, "users", referralId, "notifications"));
-              batch.set(notifRef, {
-                  userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
-                  message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
-                  amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
-              });
+            const settingsDocRef = doc(db, "system", "settings");
+            const settingsDoc = await getDoc(settingsDocRef);
+            if (settingsDoc.exists()) {
+                const settingsData = settingsDoc.data();
+                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
+                if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
+                    const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                    batch.set(notifRef, {
+                        userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
+                        message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
+                        status: 'unread', seen: false, createdAt: serverTimestamp(),
+                    });
+                }
+                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
+                for (const tier of bonusTiers) {
+                    if (newTeamCount === tier.referrals) {
+                        const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                        batch.set(notifRef, {
+                            userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
+                            message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
+                            amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
+                        });
+                    }
+                }
             }
-          }
+            await batch.commit();
         }
-        await batch.commit();
       }
 
       localStorage.removeItem('referralId');
