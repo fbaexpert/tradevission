@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useFirebase } from "@/lib/firebase/provider";
+import { httpsCallable } from "firebase/functions";
 import {
   collection,
   onSnapshot,
@@ -149,7 +150,7 @@ const typeColors: { [key: string]: string } = {
 
 
 export default function AdminUsersPage() {
-  const { db } = useFirebase();
+  const { db, functions } = useFirebase();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -619,54 +620,19 @@ export default function AdminUsersPage() {
     }
   };
 
-  const fullUserDelete = async (userToDelete: User | TeamMember) => {
-    if (!db) return;
+  const fullUserDelete = async (userId: string, userEmail: string) => {
     setIsSubmitting(true);
     try {
-        const batch = writeBatch(db);
-        const userDocRef = doc(db, "users", userToDelete.id);
-        batch.delete(userDocRef);
-
-        const collectionsToDelete = ["notifications", "userPlans", "supportTickets", "vipMailbox"];
-        for (const subCollection of collectionsToDelete) {
-            const snapshot = await getDocs(collection(userDocRef, subCollection));
-            snapshot.forEach(subDoc => batch.delete(subDoc.ref));
-        }
-        const relatedDataQueries: (Query | DocumentReference)[] = [
-            query(collection(db, "deposits"), where("uid", "==", userToDelete.id)),
-            query(collection(db, "withdrawals"), where("userId", "==", userToDelete.id)),
-            query(collection(db, "activityLogs"), where("userId", "==", userToDelete.id)),
-            query(collection(db, "supportTickets"), where("userId", "==", userToDelete.id)),
-            doc(db, "cpm_coins", userToDelete.id),
-            query(collection(db, "cpm_purchase_logs"), where("userId", "==", userToDelete.id)),
-            query(collection(db, "feedback"), where("userId", "==", userToDelete.id)),
-            query(collection(db, "userPlans"), where("userId", "==", userToDelete.id)),
-        ];
-        
-        for (const q of relatedDataQueries) {
-            if ("type" in q && q.type === 'query') {
-                const snapshot = await getDocs(q as Query);
-                snapshot.forEach(subDoc => batch.delete(subDoc.ref));
-            } else if ("type" in q && q.type === 'document') {
-                batch.delete(q as DocumentReference);
-            }
-        }
-
-
-        if ('referredBy' in userToDelete && (userToDelete as User).referredBy) {
-            const referrerRef = doc(db, "users", (userToDelete as User).referredBy!);
-            batch.update(referrerRef, { totalTeamMembers: increment(-1) });
-        }
-        await batch.commit();
-        toast({ title: "User Deleted", description: `All data for ${userToDelete.email} has been removed from the database.` });
-
+        const deleteUserFunction = httpsCallable(functions, 'deleteUser');
+        await deleteUserFunction({ userId: userId });
+        toast({ title: "User Deleted", description: `All data for ${userEmail} has been removed.` });
     } catch (error: any) {
         console.error("Error during full user delete:", error);
-        toast({ variant: "destructive", title: "Deletion Failed", description: "Could not delete user and their data." });
+        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete user and their data." });
     } finally {
         setIsSubmitting(false);
     }
-  }
+  };
 
   const handleResetUserAccount = async (userToReset: User) => {
     if (!db) return;
@@ -741,7 +707,7 @@ export default function AdminUsersPage() {
     if (!viewingUser || !db) return;
     setIsSubmitting(true);
      for (const member of teamMembers) {
-        await fullUserDelete(member);
+        await fullUserDelete(member.id, member.email);
      }
     setIsSubmitting(false);
     toast({ title: "All Team Members Deleted", description: `All referred users of ${viewingUser.email} have been removed.`});
@@ -977,13 +943,13 @@ export default function AdminUsersPage() {
                                                 <AlertDialogHeader>
                                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                                 <AlertDialogDescription>
-                                                    This will permanently delete the user {user.name} and all their associated data. This action cannot be undone.
+                                                    This will permanently delete the user {user.name} and all their associated data from Authentication and Firestore. This action cannot be undone.
                                                 </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => fullUserDelete(user)} className="bg-destructive hover:bg-destructive/90">
-                                                    Yes, Delete User
+                                                <AlertDialogAction onClick={() => fullUserDelete(user.id, user.email)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
+                                                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete User"}
                                                 </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -1524,7 +1490,7 @@ export default function AdminUsersPage() {
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => fullUserDelete(member)} className="bg-destructive hover:bg-destructive/90">
+                                                    <AlertDialogAction onClick={() => fullUserDelete(member.id, member.email)} className="bg-destructive hover:bg-destructive/90">
                                                         Delete
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>

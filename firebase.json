@@ -16,5 +16,9 @@
     "frameworksBackend": {
       "region": "us-central1"
     }
+  },
+  "functions": {
+    "source": "src/functions",
+    "runtime": "nodejs20"
   }
 }
