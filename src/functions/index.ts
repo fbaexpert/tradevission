@@ -1,9 +1,8 @@
-
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
 // Correctly initialize the Firebase Admin SDK.
-// This was the missing line causing the "Internal Server Error".
+// This is the most important line for the function to work.
 admin.initializeApp();
 
 const db = admin.firestore();
@@ -11,7 +10,9 @@ const auth = admin.auth();
 const storage = admin.storage();
 
 /**
- * Deletes all documents in a collection or subcollection.
+ * Deletes all documents in a collection or subcollection in batches.
+ * @param {string} collectionPath The path to the collection to delete.
+ * @param {number} batchSize The number of documents to delete in each batch.
  */
 async function deleteCollection(collectionPath: string, batchSize: number): Promise<void> {
   const collectionRef = db.collection(collectionPath);
@@ -22,6 +23,11 @@ async function deleteCollection(collectionPath: string, batchSize: number): Prom
   });
 }
 
+/**
+ * Helper function for deleteCollection that recursively deletes documents in a batch.
+ * @param {admin.firestore.Query} query The query for the batch of documents to delete.
+ * @param {Function} resolve The promise's resolve function.
+ */
 async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: unknown) => void): Promise<void> {
   const snapshot = await query.get();
 
@@ -37,6 +43,7 @@ async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: u
 
   await batch.commit();
 
+  // Recurse on the next process tick, to avoid hitting memory limits.
   process.nextTick(() => {
     deleteQueryBatch(query, resolve);
   });
@@ -71,22 +78,25 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     );
   }
 
+  // 2. Delete from Firebase Authentication
   try {
-    // 2. Delete from Firebase Authentication
-    // We catch the error in case the auth user was already deleted, but data remains.
-    await auth.deleteUser(userIdToDelete).catch((error) => {
-      if (error.code !== "auth/user-not-found") {
-        throw error;
-      }
-      console.log(`Auth user ${userIdToDelete} not found, proceeding with database cleanup.`);
-    });
+    await auth.deleteUser(userIdToDelete);
+    functions.logger.log(`Successfully deleted auth user: ${userIdToDelete}`);
+  } catch (error: any) {
+    if (error.code !== "auth/user-not-found") {
+      throw new functions.https.HttpsError("internal", `Failed to delete auth user: ${error.message}`);
+    }
+    functions.logger.warn(`Auth user ${userIdToDelete} not found, proceeding with database cleanup.`);
+  }
 
-    // 3. Delete Firestore Data
+  // 3. Delete Firestore Data
+  try {
     const firestorePaths = [
       `users/${userIdToDelete}/notifications`,
       `users/${userIdToDelete}/userPlans`,
       `users/${userIdToDelete}/vipMailbox`,
-      `users/${userIdToDelete}/airdrop_claims`
+      `users/${userIdToDelete}/airdrop_claims`,
+      `users/${userIdToDelete}/supportTickets`,
     ];
     
     // Delete all known subcollections recursively
@@ -105,41 +115,45 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
         { name: "kycSubmissions", field: "userId" },
         { name: "supportTickets", field: "userId" },
     ];
+    
+    const rootBatch = db.batch();
 
     for (const { name, field } of collectionsToClean) {
         const snapshot = await db.collection(name).where(field, "==", userIdToDelete).get();
         if (!snapshot.empty) {
-            const batch = db.batch();
             for (const doc of snapshot.docs) {
-                // If it's a support ticket, also delete its subcollection
                 if (name === 'supportTickets') {
                     await deleteCollection(`supportTickets/${doc.id}/replies`, 100);
                 }
-                batch.delete(doc.ref);
+                rootBatch.delete(doc.ref);
             }
-            await batch.commit();
         }
     }
     
     // Delete the main user document and cpm_coin document
-    await db.collection("users").doc(userIdToDelete).delete();
-    await db.collection("cpm_coins").doc(userIdToDelete).delete();
-
-    // 4. Delete user files from Firebase Storage
-    const bucket = storage.bucket();
-    // No need to check for existence, deleteFiles is safe
-    await bucket.deleteFiles({ prefix: `kyc_documents/${userIdToDelete}/` });
-    await bucket.deleteFiles({ prefix: `deposit_screenshots/${userIdToDelete}/` });
-
-
-    return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
+    rootBatch.delete(db.collection("users").doc(userIdToDelete));
+    rootBatch.delete(db.collection("cpm_coins").doc(userIdToDelete));
+    
+    await rootBatch.commit();
+    functions.logger.log(`Successfully deleted Firestore data for user: ${userIdToDelete}`);
 
   } catch (error: any) {
-    console.error("Error deleting user:", error);
-    // Throw a specific error for the client to handle
-    throw new functions.https.HttpsError(
-      "internal",
-      `An error occurred while deleting the user: ${error.message}`
-    );
+      functions.logger.error("Error deleting Firestore data:", error);
+      throw new functions.https.HttpsError("internal", `Failed to delete Firestore data: ${error.message}`);
   }
+
+  // 4. Delete user files from Firebase Storage
+  try {
+    const bucket = storage.bucket();
+    await bucket.deleteFiles({ prefix: `kyc_documents/${userIdToDelete}/` });
+    await bucket.deleteFiles({ prefix: `deposit_screenshots/${userIdToDelete}/` });
+    functions.logger.log(`Successfully deleted Storage files for user: ${userIdToDelete}`);
+  } catch (error: any) {
+      if (error.code !== 404) { // Ignore 'Not Found' errors
+          functions.logger.error("Error deleting Storage files:", error);
+          throw new functions.https.HttpsError("internal", `Failed to delete Storage files: ${error.message}`);
+      }
+  }
+
+  return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
 });
