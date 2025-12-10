@@ -94,18 +94,16 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Prioritize URL parameter
     const refIdFromUrl = searchParams.get('ref');
-    if (refIdFromUrl) {
-      setReferralId(refIdFromUrl);
-      localStorage.setItem('referralId', refIdFromUrl); // Sync localStorage
-      return;
-    }
-
-    // Fallback to localStorage
     const refIdFromStorage = localStorage.getItem('referralId');
-    if (refIdFromStorage) {
-      setReferralId(refIdFromStorage);
+    const finalRefId = refIdFromUrl || refIdFromStorage;
+
+    if (finalRefId) {
+      setReferralId(finalRefId);
+      if (finalRefId !== refIdFromStorage) {
+        localStorage.setItem('referralId', finalRefId);
+        sessionStorage.setItem('referralId', finalRefId);
+      }
     }
   }, [searchParams]);
 
@@ -116,13 +114,14 @@ export default function AuthForm() {
         if (docSnap.exists()) {
           setReferrerName(docSnap.data().name);
         } else {
-          // If referrer ID is invalid, clear it
           localStorage.removeItem('referralId');
+          sessionStorage.removeItem('referralId');
           setReferralId(null);
           setReferrerName(null);
         }
       }).catch(() => {
         localStorage.removeItem('referralId');
+        sessionStorage.removeItem('referralId');
         setReferralId(null);
         setReferrerName(null);
       });
@@ -365,7 +364,7 @@ export default function AuthForm() {
                  <p className="text-sm text-primary">
                     🎉 You were invited by: <strong>{referrerName}</strong>
                  </p>
-                 <p className="text-xs text-primary/80">Sign up to join their team!</p>
+                 {activeTab === 'signup' && <p className="text-xs text-primary/80">Sign up to join their team!</p>}
             </div>
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
