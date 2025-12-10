@@ -113,7 +113,7 @@ export default function AuthForm() {
   }, [searchParams]);
 
   useEffect(() => {
-    if(referralId && db) {
+    if (referralId && db) {
         const referrerDocRef = doc(db, "users", referralId);
         getDoc(referrerDocRef).then(docSnap => {
             if (docSnap.exists()) {

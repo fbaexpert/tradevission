@@ -32,15 +32,20 @@ export default function LandingPage() {
 
   useEffect(() => {
     const refId = searchParams.get('ref');
+    let finalHref = "/login";
+    
     if (refId) {
+      // Store in localStorage for persistence
       localStorage.setItem('referralId', refId);
-      setLoginHref(`/login?ref=${refId}`);
+      finalHref = `/login?ref=${refId}`;
     } else {
+      // Fallback to localStorage if no ref in URL
       const storedRefId = localStorage.getItem('referralId');
       if (storedRefId) {
-        setLoginHref(`/login?ref=${storedRefId}`);
+        finalHref = `/login?ref=${storedRefId}`;
       }
     }
+    setLoginHref(finalHref);
   }, [searchParams]);
 
   return (
