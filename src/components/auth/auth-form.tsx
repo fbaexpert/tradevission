@@ -102,7 +102,6 @@ export default function AuthForm() {
       setReferralId(finalRefId);
       if (finalRefId !== refIdFromStorage) {
         localStorage.setItem('referralId', finalRefId);
-        sessionStorage.setItem('referralId', finalRefId);
       }
     }
   }, [searchParams]);
@@ -115,13 +114,11 @@ export default function AuthForm() {
           setReferrerName(docSnap.data().name);
         } else {
           localStorage.removeItem('referralId');
-          sessionStorage.removeItem('referralId');
           setReferralId(null);
           setReferrerName(null);
         }
       }).catch(() => {
         localStorage.removeItem('referralId');
-        sessionStorage.removeItem('referralId');
         setReferralId(null);
         setReferrerName(null);
       });

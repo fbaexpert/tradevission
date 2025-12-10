@@ -32,16 +32,19 @@ export default function LandingPage() {
 
   useEffect(() => {
     const refId = searchParams.get('ref');
+    let finalHref = "/login";
+    let storedRefId: string | null = null;
+
     if (refId) {
       localStorage.setItem('referralId', refId);
-      sessionStorage.setItem('referralId', refId);
-      setLoginHref(`/login?ref=${refId}`);
+      finalHref = `/login?ref=${refId}`;
     } else {
-      const storedRefId = localStorage.getItem('referralId');
+      storedRefId = localStorage.getItem('referralId');
       if (storedRefId) {
-        setLoginHref(`/login?ref=${storedRefId}`);
+        finalHref = `/login?ref=${storedRefId}`;
       }
     }
+    setLoginHref(finalHref);
   }, [searchParams]);
 
   return (
