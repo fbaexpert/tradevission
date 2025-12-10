@@ -100,113 +100,87 @@ export default function AdPage() {
     setError(null);
 
     try {
-        await runTransaction(db, async (transaction) => {
+        const { finalReward, teamBonus } = await runTransaction(db, async (transaction) => {
             const userPlanDocRef = doc(db, "userPlans", userPlanId);
             const userDocRef = doc(db, "users", user.uid);
             
-            // --- 1. READ ALL DOCUMENTS FIRST ---
             const userPlanDoc = await transaction.get(userPlanDocRef);
             const currentUserDoc = await transaction.get(userDocRef);
             
-            if (!userPlanDoc.exists()) {
-                throw new Error("User plan data not found. Please try again.");
-            }
-            if (!currentUserDoc.exists()) {
-                throw new Error("Your user data could not be found.");
-            }
+            if (!userPlanDoc.exists()) throw new Error("User plan data not found.");
+            if (!currentUserDoc.exists()) throw new Error("Your user data could not be found.");
             
             const planData = userPlanDoc.data();
             const currentUserData = currentUserDoc.data();
             const dailyReward = planData.dailyReward || 0;
 
-            // --- 2. PERFORM VALIDATION ---
-            if (planData.status === 'expired') {
-                throw new Error("This plan has expired.");
-            }
+            if (planData.status === 'expired') throw new Error("This plan has expired.");
             if (planData.lastClaimTimestamp) {
                 const lastClaimTime = planData.lastClaimTimestamp.toDate();
-                const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
-                if (Date.now() - lastClaimTime.getTime() < twentyFourHoursInMs) {
+                if (Date.now() - lastClaimTime.getTime() < 24 * 60 * 60 * 1000) {
                     throw new Error("Reward can only be claimed once every 24 hours.");
                 }
             }
-            if (dailyReward <= 0) {
-                throw new Error("No valid daily reward amount configured for this plan.");
-            }
+            if (dailyReward <= 0) throw new Error("No valid daily reward amount for this plan.");
 
             const newDaysCompleted = (planData.daysCompleted || 0) + 1;
             const isPlanNowExpired = newDaysCompleted >= planData.durationDays;
             
-            const planUpdateData: any = {
+            transaction.update(userPlanDocRef, {
                 daysCompleted: increment(1),
                 lastClaimTimestamp: serverTimestamp(),
                 status: isPlanNowExpired ? 'expired' : 'active',
-            };
-
-            // This is a deferred read, but it's okay because it's based on data we already have (currentUserData)
-            let referrerDoc = null;
-            if (currentUserData && currentUserData.referredBy) {
-                const referrerId = currentUserData.referredBy;
-                const referrerDocRef = doc(db, "users", referrerId);
-                referrerDoc = await transaction.get(referrerDocRef);
-            }
-
-            // --- 3. PREPARE ALL WRITES ---
-            transaction.update(userPlanDocRef, planUpdateData);
+            });
             transaction.update(userDocRef, { balance0: increment(dailyReward) });
             
-            // --- DAILY TEAM BONUS ---
-            if (referrerDoc && referrerDoc.exists() && !referrerDoc.data()!.teamBonusPaused) {
-                const teamBonus = dailyReward * 0.10; // 10% daily team bonus
-                transaction.update(referrerDoc.ref, {
-                    balance0: increment(teamBonus),
-                    totalTeamBonus: increment(teamBonus)
-                });
+            let calculatedTeamBonus = 0;
+            if (currentUserData && currentUserData.referredBy) {
+                const referrerDocRef = doc(db, "users", currentUserData.referredBy);
+                const referrerDoc = await transaction.get(referrerDocRef);
+                if (referrerDoc.exists() && !referrerDoc.data()!.teamBonusPaused) {
+                    calculatedTeamBonus = dailyReward * 0.10; // 10% daily team bonus
+                    transaction.update(referrerDocRef, {
+                        balance0: increment(calculatedTeamBonus),
+                        totalTeamBonus: increment(calculatedTeamBonus)
+                    });
+                }
             }
+            return { finalReward: dailyReward, teamBonus: calculatedTeamBonus };
         });
 
-        // --- 4. Post-transaction updates (Notifications and Logs) ---
+        // --- Post-transaction updates (Notifications and Logs) ---
         const planDoc = await getDoc(doc(db, "userPlans", userPlanId));
         if (!planDoc.exists()) throw new Error("Could not retrieve plan data after transaction.");
-        const planData = planDoc.data();
-        const dailyReward = planData?.dailyReward || 0;
-
+        
         const batch = writeBatch(db);
         
-        const notifRef = doc(collection(db, "users", user.uid, "notifications"));
-        batch.set(notifRef, {
+        batch.set(doc(collection(db, "users", user.uid, "notifications")), {
             userId: user.uid, type: 'profit', title: '💰 Daily Profit Added',
-            message: `You earned $${dailyReward.toFixed(2)} from your plan: ${planData?.planName}.`,
-            amount: dailyReward, status: 'unread', seen: false, createdAt: serverTimestamp(), relatedId: userPlanId
+            message: `You earned $${finalReward.toFixed(2)} from your plan: ${planDoc.data().planName}.`,
+            amount: finalReward, status: 'unread', seen: false, createdAt: serverTimestamp(), relatedId: userPlanId
         });
         
-        const activityLogRef = doc(collection(db, "activityLogs"));
-        batch.set(activityLogRef, {
+        batch.set(doc(collection(db, "activityLogs")), {
             userId: user.uid, action: 'daily_profit_claim',
-            details: `Claimed $${dailyReward.toFixed(2)} from plan ${planData?.planName} (${userPlanId})`,
+            details: `Claimed $${finalReward.toFixed(2)} from plan ${planDoc.data().planName} (${userPlanId})`,
             timestamp: serverTimestamp(), relatedId: userPlanId
         });
 
         const currentUserDoc = await getDoc(doc(db, "users", user.uid));
         const currentUserData = currentUserDoc.data();
-        if (currentUserData && currentUserData.referredBy) {
-             const referrerDoc = await getDoc(doc(db, "users", currentUserData.referredBy));
-             if (referrerDoc.exists() && !referrerDoc.data().teamBonusPaused) {
-                const teamBonus = dailyReward * 0.10;
-                const referrerNotifRef = doc(collection(db, "users", currentUserData.referredBy, "notifications"));
-                batch.set(referrerNotifRef, {
-                    userId: currentUserData.referredBy, type: 'success', title: '💸 Team Bonus!',
-                    message: `You earned a $${teamBonus.toFixed(2)} bonus from your team member ${currentUserData.name}'s daily task.`,
-                    amount: teamBonus, status: 'unread', seen: false, createdAt: serverTimestamp(), relatedId: user.uid,
-                });
-             }
+        if (currentUserData?.referredBy && teamBonus > 0) {
+            batch.set(doc(collection(db, "users", currentUserData.referredBy, "notifications")), {
+                userId: currentUserData.referredBy, type: 'success', title: '💸 Team Bonus!',
+                message: `You earned a $${teamBonus.toFixed(2)} bonus from your team member ${currentUserData.name}'s daily task.`,
+                amount: teamBonus, status: 'unread', seen: false, createdAt: serverTimestamp(), relatedId: user.uid,
+            });
         }
         
         await batch.commit();
 
         toast({
             title: "Reward Claimed!",
-            description: `You've earned $${dailyReward.toFixed(2)}.`,
+            description: `You've earned $${finalReward.toFixed(2)}.`,
             className: "bg-green-500 text-white"
         });
         router.push('/dashboard');

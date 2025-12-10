@@ -13,7 +13,8 @@ import {
   deleteDoc,
   where,
   getDocs,
-  getDoc
+  getDoc,
+  runTransaction
 } from "firebase/firestore";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -83,119 +84,106 @@ export default function AdminDepositsPage() {
     if (!db) return;
     setUpdatingId(deposit.id);
 
-    const originalDeposits = [...deposits];
-    setDeposits(deposits.map(d => d.id === deposit.id ? { ...d, status: newStatus } : d));
-
     try {
-        const batch = writeBatch(db);
+      await runTransaction(db, async (transaction) => {
         const depositDocRef = doc(db, "deposits", deposit.id);
-
-        batch.update(depositDocRef, { status: newStatus });
-        
         const userDocRef = doc(db, "users", deposit.uid);
+
+        // --- READS ---
+        const userDoc = await transaction.get(userDocRef);
+        if (!userDoc.exists()) {
+          throw new Error("User not found.");
+        }
+        const userData = userDoc.data();
+
+        // --- WRITES ---
+        transaction.update(depositDocRef, { status: newStatus });
+
         if (newStatus === "approved") {
             let totalAmountToAdd = deposit.amount;
 
-            // Check for active deposit boost
+            // Deposit Boost Check
             const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef);
+            const settingsDoc = await getDoc(settingsDocRef); // getDoc is fine inside transaction for read-only config
             if (settingsDoc.exists()) {
                 const settings = settingsDoc.data();
                 const boost = settings.depositBoost;
                 if (boost && boost.enabled && new Date() < new Date(boost.endTime)) {
                     const bonusAmount = deposit.amount * (boost.bonusPercentage / 100);
                     totalAmountToAdd += bonusAmount;
-                    
-                    // Send bonus notification
-                    const bonusNotifRef = doc(collection(db, "users", deposit.uid, "notifications"));
-                    batch.set(bonusNotifRef, {
-                        userId: deposit.uid,
-                        type: 'success',
-                        title: `🎉 Deposit Bonus!`,
-                        message: `You received a $${bonusAmount.toFixed(2)} bonus from the "${boost.title}" event!`,
-                        amount: bonusAmount,
-                        status: 'unread', seen: false, createdAt: serverTimestamp(),
-                    });
                 }
             }
 
-            batch.update(userDocRef, { 
+            transaction.update(userDocRef, { 
                 balance0: increment(totalAmountToAdd),
                 depositDone: true
             });
-        }
-        
-        const notifCollectionRef = collection(db, "users", deposit.uid, "notifications");
-        const notifDoc = {
-            userId: deposit.uid,
-            type: "deposit",
-            title: newStatus === "approved" ? "✅ Deposit Approved" : "❌ Deposit Rejected",
-            message: `Your deposit request for $${deposit.amount.toFixed(2)} has been ${newStatus}.`,
-            amount: deposit.amount,
-            status: "unread",
-            seen: false,
-            createdAt: serverTimestamp(),
-            relatedId: deposit.id,
-        };
-        batch.set(doc(notifCollectionRef), notifDoc);
 
-        const activityLogCollectionRef = collection(db, "activityLogs");
-        const activityLogDoc = {
-            userId: deposit.uid,
-            action: `deposit_${newStatus}`,
-            details: `Admin ${newStatus} deposit of $${deposit.amount.toFixed(2)}`,
-            timestamp: serverTimestamp(),
-        };
-        batch.set(doc(activityLogCollectionRef), activityLogDoc);
-
-        // --- FIRST DEPOSIT REFERRAL BONUS ---
-        if (newStatus === 'approved') {
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                // Check if user has a referrer AND this is their first deposit (`depositDone` is false before update)
-                if (userData.referredBy && !userData.depositDone) {
-                    const referrerRef = doc(db, "users", userData.referredBy);
+            // First Deposit Referral Bonus Logic
+            if (userData.referredBy && !userData.depositDone) {
+                const referrerRef = doc(db, "users", userData.referredBy);
+                const referrerDoc = await transaction.get(referrerRef);
+                if (referrerDoc.exists()) {
                     const bonusAmount = deposit.amount * 0.15; // 15% bonus
-                    batch.update(referrerRef, {
+                    transaction.update(referrerRef, {
                         balance0: increment(bonusAmount),
                         totalReferralBonus: increment(bonusAmount)
                     });
-                    
-                    // Send notification to referrer
-                    const referrerNotifRef = doc(collection(db, "users", userData.referredBy, "notifications"));
-                    batch.set(referrerNotifRef, {
-                    userId: userData.referredBy,
-                    type: 'success',
-                    title: '🎉 Referral Bonus!',
-                    message: `You earned a $${bonusAmount.toFixed(2)} bonus from your referral ${userData.name}'s first deposit.`,
-                    amount: bonusAmount,
-                    status: 'unread',
-                    seen: false,
-                    createdAt: serverTimestamp(),
-                    });
                 }
-                // --- TEAM DEPOSIT UPDATE ---
-                if (userData.referredBy) {
-                    const referrerRef = doc(db, "users", userData.referredBy);
-                    batch.update(referrerRef, {
+            }
+            
+            // Team Deposit Update
+            if (userData.referredBy) {
+                const referrerRef = doc(db, "users", userData.referredBy);
+                // Check if referrer exists before attempting update
+                const referrerDoc = await transaction.get(referrerRef);
+                if (referrerDoc.exists()) {
+                    transaction.update(referrerRef, {
                         totalTeamDeposit: increment(deposit.amount)
                     });
                 }
             }
         }
-        // --- END REFERRAL BONUS LOGIC ---
+      });
+      
+      // Post-transaction writes (notifications, logs)
+      const batch = writeBatch(db);
+      const userDocRef = doc(db, "users", deposit.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      
+      const notifMessage = `Your deposit request for $${deposit.amount.toFixed(2)} has been ${newStatus}.`;
+      batch.set(doc(collection(db, "users", deposit.uid, "notifications")), {
+          userId: deposit.uid, type: "deposit", title: newStatus === "approved" ? "✅ Deposit Approved" : "❌ Deposit Rejected",
+          message: notifMessage, amount: deposit.amount, status: "unread", seen: false,
+          createdAt: serverTimestamp(), relatedId: deposit.id,
+      });
 
-        await batch.commit();
-        
-        toast({
-            title: "Deposit Request Updated",
-            description: `Status changed to ${newStatus}.`,
-        });
+      if(newStatus === 'approved' && userData?.referredBy && !userData?.depositDone) {
+          const referrerNotifRef = doc(collection(db, "users", userData.referredBy, "notifications"));
+          const bonusAmount = deposit.amount * 0.15;
+          batch.set(referrerNotifRef, {
+              userId: userData.referredBy, type: 'success', title: '🎉 Referral Bonus!',
+              message: `You earned a $${bonusAmount.toFixed(2)} bonus from your referral ${userData.name}'s first deposit.`,
+              amount: bonusAmount, status: 'unread', seen: false, createdAt: serverTimestamp(),
+          });
+      }
+
+      batch.set(doc(collection(db, "activityLogs")), {
+          userId: deposit.uid, action: `deposit_${newStatus}`,
+          details: `Admin ${newStatus} deposit of $${deposit.amount.toFixed(2)}`,
+          timestamp: serverTimestamp(),
+      });
+      
+      await batch.commit();
+
+      toast({
+          title: "Deposit Request Updated",
+          description: `Status changed to ${newStatus}.`,
+      });
 
     } catch (error) {
         console.error("Error updating deposit status:", error);
-        setDeposits(originalDeposits);
         toast({
             variant: "destructive",
             title: "Update Failed",

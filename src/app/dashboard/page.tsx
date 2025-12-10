@@ -296,6 +296,7 @@ export default function Dashboard() {
   }
 
   const copyReferralLink = () => {
+    if(!userData) return;
     const link = `https://tradevission.online/?ref=${userData.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Referral Link Copied!", description: "Share it with your friends to build your team." });
