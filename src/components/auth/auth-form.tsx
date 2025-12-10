@@ -96,33 +96,32 @@ export default function AuthForm() {
   useEffect(() => {
     const refIdFromUrl = searchParams.get('ref');
     const refIdFromStorage = localStorage.getItem('referralId');
-
-    let finalRefId = refIdFromUrl || refIdFromStorage;
+    const finalRefId = refIdFromUrl || refIdFromStorage;
 
     if (finalRefId) {
-        if (refIdFromUrl && refIdFromUrl !== refIdFromStorage) {
-            localStorage.setItem('referralId', refIdFromUrl);
-        }
-        setReferralId(finalRefId);
+      if (refIdFromUrl && refIdFromUrl !== refIdFromStorage) {
+        localStorage.setItem('referralId', refIdFromUrl);
+      }
+      setReferralId(finalRefId);
     }
   }, [searchParams]);
 
   useEffect(() => {
     if (referralId && db) {
-        const referrerDocRef = doc(db, "users", referralId);
-        getDoc(referrerDocRef).then(docSnap => {
-            if (docSnap.exists()) {
-                setReferrerName(docSnap.data().name);
-            } else {
-                localStorage.removeItem('referralId');
-                setReferralId(null);
-                setReferrerName(null);
-            }
-        }).catch(() => {
-            localStorage.removeItem('referralId');
-            setReferralId(null);
-            setReferrerName(null);
-        });
+      const referrerDocRef = doc(db, "users", referralId);
+      getDoc(referrerDocRef).then(docSnap => {
+        if (docSnap.exists()) {
+          setReferrerName(docSnap.data().name);
+        } else {
+          localStorage.removeItem('referralId');
+          setReferralId(null);
+          setReferrerName(null);
+        }
+      }).catch(() => {
+        localStorage.removeItem('referralId');
+        setReferralId(null);
+        setReferrerName(null);
+      });
     }
   }, [referralId, db]);
 
@@ -358,12 +357,12 @@ export default function AuthForm() {
     <Card className="bg-card/80 backdrop-blur-sm border-border/20">
       <CardContent className="p-4 sm:p-6">
         {referrerName && (
-            <Alert variant="default" className="mb-4 bg-primary/10 border-primary/20">
-                 <Users className="h-4 w-4 !text-primary"/>
-                 <AlertDescription className="text-primary">
-                    You were invited by <span className="font-bold">{referrerName}</span>! Sign up to join their team.
-                 </AlertDescription>
-            </Alert>
+             <div className="p-3 mb-4 rounded-md bg-primary/10 border border-primary/20 text-center">
+                 <p className="text-sm text-primary">
+                    🎉 You were invited by: <strong>{referrerName}</strong>
+                 </p>
+                 <p className="text-xs text-primary/80">Sign up to join their team!</p>
+            </div>
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-muted/50">
