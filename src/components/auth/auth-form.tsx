@@ -94,21 +94,20 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Robust referral ID detection
+    // This logic ensures the referral ID is robustly captured.
+    // 1. Prioritize URL parameter.
     const refIdFromUrl = searchParams.get('ref');
-    let finalRefId = refIdFromUrl;
+    // 2. Fallback to localStorage.
+    const refIdFromStorage = localStorage.getItem('referralId');
 
-    if (!finalRefId) {
-      // If not in URL, check localStorage as a fallback
-      finalRefId = localStorage.getItem('referralId');
-    }
+    let finalRefId = refIdFromUrl || refIdFromStorage;
 
     if (finalRefId) {
-      setReferralId(finalRefId);
-      // Ensure localStorage is updated if the URL has a new ref
-      if (refIdFromUrl) {
-        localStorage.setItem('referralId', refIdFromUrl);
-      }
+        setReferralId(finalRefId);
+        // If the URL had the ID, ensure localStorage is up to date.
+        if (refIdFromUrl && refIdFromUrl !== refIdFromStorage) {
+            localStorage.setItem('referralId', refIdFromUrl);
+        }
     }
   }, [searchParams]);
 
@@ -119,14 +118,16 @@ export default function AuthForm() {
             if (docSnap.exists()) {
                 setReferrerName(docSnap.data().name);
             } else {
-                // Invalid referrer, clear it
+                // Invalid referrer, clear it to avoid issues
                 localStorage.removeItem('referralId');
                 setReferralId(null);
+                setReferrerName(null);
             }
         }).catch(() => {
              // Handle potential errors fetching the doc
             localStorage.removeItem('referralId');
             setReferralId(null);
+            setReferrerName(null);
         });
     }
   }, [referralId, db]);
@@ -205,7 +206,7 @@ export default function AuthForm() {
       
       // Use a transaction to ensure all database writes succeed or fail together
       await runTransaction(db, async (transaction) => {
-        const finalReferralId = localStorage.getItem('referralId');
+        const finalReferralId = referralId; // Use state which is derived from URL/localStorage
         
         let ipAddress = 'N/A';
         let deviceInfo = 'N/A';
@@ -286,10 +287,9 @@ export default function AuthForm() {
       });
       
       // Perform non-transactional writes (notifications) after the main transaction succeeds
-      const finalReferralId = localStorage.getItem('referralId');
-      if (finalReferralId) {
+      if (referralId) {
         const batch = writeBatch(db);
-        const referrerRef = doc(db, "users", finalReferralId);
+        const referrerRef = doc(db, "users", referralId);
         const referrerDoc = await getDoc(referrerRef);
         const referrerData = referrerDoc.data();
         const newTeamCount = (referrerData?.totalTeamMembers || 0);
@@ -300,9 +300,9 @@ export default function AuthForm() {
           const settingsData = settingsDoc.data();
           const commanderSettings: CommanderSettings | undefined = settingsData.commander;
           if (commanderSettings && referrerData?.isCommander && newTeamCount === commanderSettings.referralRequirement) {
-             const notifRef = doc(collection(db, "users", finalReferralId, "notifications"));
+             const notifRef = doc(collection(db, "users", referralId, "notifications"));
              batch.set(notifRef, {
-                userId: finalReferralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
+                userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
                 message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
                 status: 'unread', seen: false, createdAt: serverTimestamp(),
              });
@@ -310,9 +310,9 @@ export default function AuthForm() {
           const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
           for (const tier of bonusTiers) {
             if (newTeamCount === tier.referrals) {
-              const notifRef = doc(collection(db, "users", finalReferralId, "notifications"));
+              const notifRef = doc(collection(db, "users", referralId, "notifications"));
               batch.set(notifRef, {
-                  userId: finalReferralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
+                  userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
                   message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
                   amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
               });
