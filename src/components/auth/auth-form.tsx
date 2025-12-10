@@ -94,15 +94,18 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Prioritize URL parameter
     const refIdFromUrl = searchParams.get('ref');
-    const refIdFromStorage = localStorage.getItem('referralId');
-    const finalRefId = refIdFromUrl || refIdFromStorage;
+    if (refIdFromUrl) {
+      setReferralId(refIdFromUrl);
+      localStorage.setItem('referralId', refIdFromUrl); // Sync localStorage
+      return;
+    }
 
-    if (finalRefId) {
-      if (refIdFromUrl && refIdFromUrl !== refIdFromStorage) {
-        localStorage.setItem('referralId', refIdFromUrl);
-      }
-      setReferralId(finalRefId);
+    // Fallback to localStorage
+    const refIdFromStorage = localStorage.getItem('referralId');
+    if (refIdFromStorage) {
+      setReferralId(refIdFromStorage);
     }
   }, [searchParams]);
 
@@ -113,6 +116,7 @@ export default function AuthForm() {
         if (docSnap.exists()) {
           setReferrerName(docSnap.data().name);
         } else {
+          // If referrer ID is invalid, clear it
           localStorage.removeItem('referralId');
           setReferralId(null);
           setReferrerName(null);
