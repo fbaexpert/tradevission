@@ -26,7 +26,7 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
 
     const ADMIN_EMAIL = "ummarfarooq38990@gmail.com";
     if (context.auth.token.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-         throw new functions.httpshttps.HttpsError(
+         throw new functions.https.HttpsError(
             "permission-denied",
             "You must be an admin to delete a user."
         );
