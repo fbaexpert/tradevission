@@ -190,104 +190,113 @@ export default function AuthForm() {
     if (!auth || !db) return;
 
     try {
-      let commanderSettings: CommanderSettings | undefined;
-      let bonusTiers: SuperBonusTier[] = [];
-      const settingsDocRef = doc(db, "system", "settings");
-      const settingsDoc = await getDoc(settingsDocRef);
-      if (settingsDoc.exists()) {
-        const settingsData = settingsDoc.data();
-        commanderSettings = settingsData.commander;
-        bonusTiers = settingsData.superBonusTiers || [];
-      }
-      
-      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-      const user = userCredential.user;
+        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+        const user = userCredential.user;
 
-      await updateProfile(user, { displayName: values.name });
-      
-      await runTransaction(db, async (transaction) => {
+        await updateProfile(user, { displayName: values.name });
+
+        // Fetch IP and device info
         let ipAddress = 'N/A';
         let deviceInfo = 'N/A';
         try {
-          const response = await fetch('https://api.ipify.org?format=json');
-          const data = await response.json();
-          ipAddress = data.ip;
-          deviceInfo = navigator.userAgent;
+            const response = await fetch('https://api.ipify.org?format=json');
+            const data = await response.json();
+            ipAddress = data.ip;
+            deviceInfo = navigator.userAgent;
         } catch (e) {
-          console.error("Could not fetch IP/device info:", e);
+            console.error("Could not fetch IP/device info:", e);
         }
 
+        // Create new user document
         const newUserRef = doc(db, "users", user.uid);
         const userData: any = {
-          name: values.name, email: values.email, phone: values.phone,
-          createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
-          withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
-          depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
-          totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
-          ipAddress: ipAddress, deviceInfo: deviceInfo,
+            name: values.name, email: values.email, phone: values.phone,
+            createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
+            withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
+            depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
+            totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
+            ipAddress: ipAddress, deviceInfo: deviceInfo,
         };
-        
         if (referralId) {
-          const referrerRef = doc(db, "users", referralId);
-          const referrerDoc = await transaction.get(referrerRef);
-          if (!referrerDoc.exists()) {
-            throw new Error("Invalid referral code. Please check the link and try again.");
-          }
-          
-          userData.referredBy = referralId;
-          const referrerData = referrerDoc.data();
-          const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
-
-          transaction.update(referrerRef, { totalTeamMembers: increment(1) });
-          
-          if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
-            transaction.update(referrerRef, { isCommander: true });
-          }
-
-          const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
-          for (const tier of bonusTiers) {
-            if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
-              transaction.update(referrerRef, {
-                balance0: increment(tier.bonus),
-                awardedSuperBonuses: [...awardedBonuses, tier.referrals]
-              });
-            }
-          }
+            userData.referredBy = referralId;
         }
-        transaction.set(newUserRef, userData);
-      });
-    
-      if (referralId) {
-        const batch = writeBatch(db);
-        const referrerRef = doc(db, "users", referralId);
-        const referrerDoc = await getDoc(referrerRef);
         
-        if (referrerDoc.exists()) {
-            const referrerData = referrerDoc.data();
-            const newTeamCount = (referrerData.totalTeamMembers || 0);
+        await setDoc(newUserRef, userData);
+        
+        // If there's a referrer, update their data in a transaction
+        if (referralId) {
+            const referrerRef = doc(db, "users", referralId);
+            const settingsDocRef = doc(db, "system", "settings");
 
-            if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
-                const notifRef = doc(collection(db, "users", referralId, "notifications"));
-                batch.set(notifRef, {
-                    userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
-                    message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
-                    status: 'unread', seen: false, createdAt: serverTimestamp(),
-                });
-            }
-            for (const tier of bonusTiers) {
-                if (newTeamCount === tier.referrals && !(referrerData.awardedSuperBonuses || []).includes(tier.referrals)) {
+            await runTransaction(db, async (transaction) => {
+                const [referrerDoc, settingsDoc] = await Promise.all([
+                    transaction.get(referrerRef),
+                    getDoc(settingsDocRef) // Reading settings outside transaction is fine, but can be done here too for consistency
+                ]);
+
+                if (!referrerDoc.exists()) {
+                    throw new Error("Invalid referral code. Referrer not found.");
+                }
+
+                transaction.update(referrerRef, { totalTeamMembers: increment(1) });
+                
+                // Bonus/Promotion Logic
+                const referrerData = referrerDoc.data();
+                const settingsData = settingsDoc.exists() ? settingsDoc.data() : {};
+                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
+                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
+                
+                const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
+                const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
+
+                // Commander Promotion Check
+                if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
+                    transaction.update(referrerRef, { isCommander: true });
+                }
+                
+                // Super Bonus Check
+                for (const tier of bonusTiers) {
+                    if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
+                        transaction.update(referrerRef, {
+                            balance0: increment(tier.bonus),
+                            awardedSuperBonuses: [...awardedBonuses, tier.referrals]
+                        });
+                    }
+                }
+            });
+
+            // Send notifications outside the transaction
+            const batch = writeBatch(db);
+            const referrerDocAfter = await getDoc(referrerRef);
+            if (referrerDocAfter.exists()) {
+                const referrerData = referrerDocAfter.data();
+                const newTeamCount = referrerData.totalTeamMembers || 0;
+                const settingsData = (await getDoc(settingsDocRef)).data() || {};
+                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
+                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
+
+                if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
                     const notifRef = doc(collection(db, "users", referralId, "notifications"));
                     batch.set(notifRef, {
-                        userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
-                        message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
-                        amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
+                        userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
+                        message: `Congratulations! You've been promoted to Commander for reaching ${commanderSettings.referralRequirement} team members.`,
+                        status: 'unread', seen: false, createdAt: serverTimestamp(),
                     });
                 }
+                for (const tier of bonusTiers) {
+                    if (newTeamCount === tier.referrals && !(referrerData.awardedSuperBonuses || []).includes(tier.referrals)) {
+                        const notifRef = doc(collection(db, "users", referralId, "notifications"));
+                        batch.set(notifRef, {
+                            userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
+                            message: `Congratulations! You reached ${tier.referrals} referrals and earned a $${tier.bonus} bonus!`,
+                            amount: tier.bonus, status: 'unread', seen: false, createdAt: serverTimestamp(),
+                        });
+                    }
+                }
+                await batch.commit();
             }
-            await batch.commit();
         }
-      }
-
+    
       localStorage.removeItem('tradevission_ref');
       router.push("/dashboard");
 
@@ -295,7 +304,7 @@ export default function AuthForm() {
       if (err.code === 'auth/email-already-in-use') {
         setError("An account with this email already exists. Please log in instead.");
       } else {
-        setError(err.message || "An unexpected error occurred.");
+        setError(err.message || "An unexpected error occurred during signup.");
       }
     } finally {
         setLoading(false);
