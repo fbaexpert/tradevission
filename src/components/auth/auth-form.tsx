@@ -94,15 +94,18 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const refId = searchParams.get('ref');
-    if (refId) {
-        localStorage.setItem('referralId', refId);
-        setReferralId(refId);
-    } else {
-        const storedRefId = localStorage.getItem('referralId');
-        if (storedRefId) {
-            setReferralId(storedRefId);
-        }
+    // Priority 1: Check URL parameter
+    const refIdFromUrl = searchParams.get('ref');
+    if (refIdFromUrl) {
+      localStorage.setItem('referralId', refIdFromUrl);
+      setReferralId(refIdFromUrl);
+      return; // Exit early if we found it in the URL
+    }
+
+    // Priority 2: Check localStorage as a fallback
+    const refIdFromStorage = localStorage.getItem('referralId');
+    if (refIdFromStorage) {
+      setReferralId(refIdFromStorage);
     }
   }, [searchParams]);
 

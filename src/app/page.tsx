@@ -7,7 +7,7 @@ import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { Footer } from "@/components/shared/footer";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
@@ -28,12 +28,17 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 
 export default function LandingPage() {
   const searchParams = useSearchParams();
+  const [loginHref, setLoginHref] = useState("/login");
 
   useEffect(() => {
     const refId = searchParams.get('ref');
     if (refId) {
-      // Store the referral ID in localStorage to persist it across navigation
+      // Store the referral ID in localStorage as a backup
       localStorage.setItem('referralId', refId);
+      // Create a login link that carries the referral ID forward
+      setLoginHref(`/login?ref=${refId}`);
+    } else {
+      setLoginHref("/login");
     }
   }, [searchParams]);
 
@@ -49,7 +54,7 @@ export default function LandingPage() {
         </div>
         <nav>
           <Button asChild>
-            <Link href="/login">Sign In</Link>
+            <Link href={loginHref}>Sign In</Link>
           </Button>
         </nav>
       </header>
@@ -67,7 +72,7 @@ export default function LandingPage() {
               TradeVission offers a modern platform to help you navigate the markets, invest in your future, and earn daily rewards.
             </p>
             <Button asChild size="lg" className="mt-10 shadow-lg shadow-primary/20">
-              <Link href="/login">
+              <Link href={loginHref}>
                 Get Started Now <ArrowRight className="ml-2" />
               </Link>
             </Button>
