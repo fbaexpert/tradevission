@@ -94,20 +94,16 @@ export default function AuthForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // This logic ensures the referral ID is robustly captured.
-    // 1. Prioritize URL parameter.
     const refIdFromUrl = searchParams.get('ref');
-    // 2. Fallback to localStorage.
     const refIdFromStorage = localStorage.getItem('referralId');
 
     let finalRefId = refIdFromUrl || refIdFromStorage;
 
     if (finalRefId) {
-        setReferralId(finalRefId);
-        // If the URL had the ID, ensure localStorage is up to date.
         if (refIdFromUrl && refIdFromUrl !== refIdFromStorage) {
             localStorage.setItem('referralId', refIdFromUrl);
         }
+        setReferralId(finalRefId);
     }
   }, [searchParams]);
 
@@ -118,13 +114,11 @@ export default function AuthForm() {
             if (docSnap.exists()) {
                 setReferrerName(docSnap.data().name);
             } else {
-                // Invalid referrer, clear it to avoid issues
                 localStorage.removeItem('referralId');
                 setReferralId(null);
                 setReferrerName(null);
             }
         }).catch(() => {
-             // Handle potential errors fetching the doc
             localStorage.removeItem('referralId');
             setReferralId(null);
             setReferrerName(null);
@@ -155,7 +149,6 @@ export default function AuthForm() {
     try {
       let emailToLogin = values.identifier;
 
-      // If the identifier doesn't look like an email, assume it's a phone number
       if (!values.identifier.includes('@')) {
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("phone", "==", values.identifier));
@@ -204,9 +197,8 @@ export default function AuthForm() {
 
       await updateProfile(user, { displayName: values.name });
       
-      // Use a transaction to ensure all database writes succeed or fail together
       await runTransaction(db, async (transaction) => {
-        const finalReferralId = referralId; // Use state which is derived from URL/localStorage
+        const finalReferralId = referralId;
         
         let ipAddress = 'N/A';
         let deviceInfo = 'N/A';
@@ -262,7 +254,7 @@ export default function AuthForm() {
             const newTeamCount = (referrerData?.totalTeamMembers || 0) + 1;
           
             const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef); // Use getDoc inside transaction for consistency
+            const settingsDoc = await getDoc(settingsDocRef);
           
             if (settingsDoc.exists()) {
                 const settingsData = settingsDoc.data();
@@ -286,7 +278,6 @@ export default function AuthForm() {
         }
       });
       
-      // Perform non-transactional writes (notifications) after the main transaction succeeds
       if (referralId) {
         const batch = writeBatch(db);
         const referrerRef = doc(db, "users", referralId);

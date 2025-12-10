@@ -35,7 +35,6 @@ export default function LandingPage() {
     if (refId) {
       // Store in localStorage for persistence across the session
       localStorage.setItem('referralId', refId);
-      // Update the login link to carry the ref parameter forward
       setLoginHref(`/login?ref=${refId}`);
     } else {
       // Fallback to localStorage if no ref in URL, but don't clear it
