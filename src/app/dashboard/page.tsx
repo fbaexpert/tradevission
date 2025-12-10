@@ -295,11 +295,23 @@ export default function Dashboard() {
     return 'secondary';
   }
 
-  const copyReferralLink = () => {
-    if(!userData) return;
+  const copyReferralLink = async () => {
+    if (!userData) return;
     const link = `https://tradevission.online/?ref=${userData.uid}`;
-    navigator.clipboard.writeText(link);
-    toast({ title: "Referral Link Copied!", description: "Share it with your friends to build your team." });
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({
+        title: "Referral Link Copied!",
+        description: "Share it with your friends to build your team.",
+      });
+    } catch (err) {
+      console.error("Failed to copy: ", err);
+      toast({
+        variant: "destructive",
+        title: "Copy Failed",
+        description: "Could not copy the link automatically. Please copy it manually.",
+      });
+    }
   };
 
 
