@@ -620,14 +620,14 @@ export default function AdminUsersPage() {
     }
   };
 
-  const fullUserDelete = async (userId: string, userEmail: string) => {
+  const handleDeleteUser = async (userId: string, userEmail: string) => {
     setIsSubmitting(true);
     try {
         const deleteUserFunction = httpsCallable(functions, 'deleteUser');
         await deleteUserFunction({ userId: userId });
-        toast({ title: "User Deleted", description: `All data for ${userEmail} has been removed.` });
+        toast({ title: "User Deletion Initiated", description: `The process to delete ${userEmail} and all their data has started.` });
     } catch (error: any) {
-        console.error("Error during full user delete:", error);
+        console.error("Error calling deleteUser function:", error);
         toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete user and their data." });
     } finally {
         setIsSubmitting(false);
@@ -707,7 +707,7 @@ export default function AdminUsersPage() {
     if (!viewingUser || !db) return;
     setIsSubmitting(true);
      for (const member of teamMembers) {
-        await fullUserDelete(member.id, member.email);
+        await handleDeleteUser(member.id, member.email);
      }
     setIsSubmitting(false);
     toast({ title: "All Team Members Deleted", description: `All referred users of ${viewingUser.email} have been removed.`});
@@ -924,8 +924,8 @@ export default function AdminUsersPage() {
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleResetUserAccount(user)} className="bg-destructive hover:bg-destructive/90">
-                                                    Yes, Reset Account
+                                                <AlertDialogAction onClick={() => handleResetUserAccount(user)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
+                                                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Reset Account"}
                                                 </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -948,7 +948,7 @@ export default function AdminUsersPage() {
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => fullUserDelete(user.id, user.email)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
+                                                <AlertDialogAction onClick={() => handleDeleteUser(user.id, user.email)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
                                                      {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete User"}
                                                 </AlertDialogAction>
                                                 </AlertDialogFooter>
@@ -1490,7 +1490,7 @@ export default function AdminUsersPage() {
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => fullUserDelete(member.id, member.email)} className="bg-destructive hover:bg-destructive/90">
+                                                    <AlertDialogAction onClick={() => handleDeleteUser(member.id, member.email)} className="bg-destructive hover:bg-destructive/90">
                                                         Delete
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>
