@@ -51,7 +51,6 @@ interface UserPlan {
     planAmount: number;
     dailyReward: number;
     durationDays: number;
-    daysCompleted: number;
     startDate: Timestamp;
     lastClaimTimestamp?: Timestamp;
     status: 'active' | 'expired';
