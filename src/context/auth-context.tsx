@@ -2,13 +2,11 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User } from "firebase/auth";
+import { User, onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import Loader from "@/components/shared/loader";
 import { MaintenanceScreen } from "@/components/shared/maintenance-screen";
-import { usePathname } from "next/navigation";
 import { useFirebase } from "@/lib/firebase/provider";
-
 
 type AuthContextType = {
   user: User | null;
@@ -27,14 +25,18 @@ interface AppSettings {
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, db, loading: firebaseLoading } = useFirebase();
+  const { auth, db } = useFirebase();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
-  const pathname = usePathname();
 
   useEffect(() => {
-    if (!db) return;
-
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+        setUser(currentUser);
+        setLoading(false);
+    });
+    
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
         if (doc.exists()) {
@@ -43,30 +45,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setSettings({ maintenanceMode: false });
         }
         setSettingsLoading(false);
+    }, () => {
+        setSettings({ maintenanceMode: false });
+        setSettingsLoading(false);
     });
 
     return () => {
-        unsubscribeSettings();
+      unsubscribeAuth();
+      unsubscribeSettings();
     };
-  }, [db]);
+  }, [auth, db]);
 
-  const loading = firebaseLoading || settingsLoading;
-
-  const isUserAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL;
-  const isMaintenanceMode = settings?.maintenanceMode === true;
-  const isAdminPage = pathname.startsWith('/admin');
+  const isLoading = loading || settingsLoading;
   
-  if (loading) {
+  if (isLoading) {
     return <Loader />;
   }
   
-  // Show maintenance screen only after settings have been loaded.
-  if (isMaintenanceMode && !isUserAdmin && !isAdminPage) {
+  const isUserAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL;
+  const isMaintenanceMode = settings?.maintenanceMode === true;
+  
+  if (isMaintenanceMode && !isUserAdmin) {
     return <MaintenanceScreen />;
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading: firebaseLoading }}>
+    <AuthContext.Provider value={{ user, loading }}>
       {children}
     </AuthContext.Provider>
   );

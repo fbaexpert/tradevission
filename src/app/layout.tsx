@@ -4,7 +4,6 @@ import { AuthProvider } from '@/context/auth-context';
 import { Toaster } from '@/components/ui/toaster';
 import { FirebaseProvider } from '@/lib/firebase/provider';
 import { Inter } from 'next/font/google';
-import { Footer } from '@/components/shared/footer';
 
 const inter = Inter({
   subsets: ['latin'],

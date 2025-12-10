@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Rocket } from "lucide-react";
@@ -18,6 +19,12 @@ export default function Loader() {
     useEffect(() => {
         let index = 0;
         const interval = setInterval(() => {
+            if (index >= loadingTexts.length - 1) {
+                clearInterval(interval);
+                setCurrentText(loadingTexts[loadingTexts.length - 1]);
+                setFade(true);
+                return;
+            }
             setFade(false); // Start fade out
             setTimeout(() => {
                 index = (index + 1) % loadingTexts.length;

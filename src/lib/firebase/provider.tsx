@@ -9,43 +9,20 @@ import { FirebaseStorage } from "firebase/storage";
 import { FirebaseApp } from "firebase/app";
 
 interface FirebaseContextType {
-  app: FirebaseApp | null;
-  auth: Auth | null;
-  db: Firestore | null;
-  storage: FirebaseStorage | null;
-  user: User | null;
-  loading: boolean;
+  app: FirebaseApp;
+  auth: Auth;
+  db: Firestore;
+  storage: FirebaseStorage;
 }
 
-const FirebaseContext = createContext<FirebaseContextType>({
-  app: null,
-  auth: null,
-  db: null,
-  storage: null,
-  user: null,
-  loading: true,
-});
+const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
 
 export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
-  const [services, setServices] = useState<Omit<FirebaseContextType, 'user' | 'loading'>>({ app: null, auth: null, db: null, storage: null });
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const { app, auth, db, storage } = getFirebase();
-    setServices({ app, auth, db, storage });
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
+  const { app, auth, db, storage } = getFirebase();
+  
   return (
-    <FirebaseContext.Provider value={{ ...services, user, loading }}>
-      {!loading && children}
+    <FirebaseContext.Provider value={{ app, auth, db, storage }}>
+      {children}
     </FirebaseContext.Provider>
   );
 };
