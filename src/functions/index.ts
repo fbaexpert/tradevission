@@ -8,6 +8,38 @@ const auth = admin.auth();
 const storage = admin.storage();
 
 /**
+ * Recursively deletes documents in a subcollection.
+ */
+async function deleteCollection(collectionPath: string, batchSize: number) {
+    const collectionRef = db.collection(collectionPath);
+    const query = collectionRef.orderBy('__name__').limit(batchSize);
+
+    return new Promise((resolve, reject) => {
+        deleteQueryBatch(query, resolve, reject);
+    });
+}
+
+async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: unknown) => void, reject: (reason?: any) => void) {
+    const snapshot = await query.get();
+
+    if (snapshot.size === 0) {
+        return resolve(0);
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+    });
+    
+    await batch.commit();
+
+    process.nextTick(() => {
+        deleteQueryBatch(query, resolve, reject);
+    });
+}
+
+
+/**
  * Deletes a user and all their associated data across Firebase services.
  * - Deletes from Firebase Authentication.
  * - Deletes all user data from Firestore, including documents in subcollections.
@@ -43,7 +75,6 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     try {
         // 2. Delete user from Firebase Authentication
         await auth.deleteUser(userIdToDelete).catch((error) => {
-            // If user not found in auth, we can still proceed with DB cleanup
             if (error.code !== 'auth/user-not-found') {
                 throw error;
             }
@@ -57,9 +88,9 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
         
         const userSubcollections = ["notifications", "userPlans", "vipMailbox", "airdrop_claims"];
         for (const subcollection of userSubcollections) {
-            const snapshot = await userDocRef.collection(subcollection).get();
-            snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+            await deleteCollection(`users/${userIdToDelete}/${subcollection}`, 100);
         }
+
         batch.delete(userDocRef);
         
         // 4. Delete related data from top-level collections
@@ -78,26 +109,20 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
             const snapshot = await db.collection(name).where(field, "==", userIdToDelete).get();
             for (const doc of snapshot.docs) {
                  batch.delete(doc.ref);
-                 // Special handling for supportTickets subcollection
                  if (name === 'supportTickets') {
-                     const repliesSnapshot = await doc.ref.collection('replies').get();
-                     repliesSnapshot.forEach(replyDoc => batch.delete(replyDoc.ref));
+                     await deleteCollection(`supportTickets/${doc.id}/replies`, 100);
                  }
             }
         }
         
-        // Delete from cpm_coins collection where doc ID is the userId
         const cpmCoinDocRef = db.collection("cpm_coins").doc(userIdToDelete);
         batch.delete(cpmCoinDocRef);
 
-        // 5. Commit all Firestore deletions
         await batch.commit();
 
         // 6. Delete user files from Firebase Storage
         const bucket = storage.bucket();
-        // Delete KYC documents
         await bucket.deleteFiles({ prefix: `kyc_documents/${userIdToDelete}/` }).catch((e) => console.warn(`Storage cleanup for kyc_documents/${userIdToDelete}/ failed:`, e.message));
-        // Delete deposit screenshots
         await bucket.deleteFiles({ prefix: `deposit_screenshots/${userIdToDelete}/` }).catch((e) => console.warn(`Storage cleanup for deposit_screenshots/${userIdToDelete}/ failed:`, e.message));
 
         return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
