@@ -97,6 +97,7 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
     }, [plan.startDate, plan.durationDays]);
     
     useEffect(() => {
+        if (!plan) return;
         const calculateTimeLeft = () => {
             if (plan.lastClaimTimestamp) {
                 const now = new Date().getTime();
@@ -124,7 +125,7 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
 
         return () => clearInterval(timerInterval);
 
-    }, [plan.lastClaimTimestamp]);
+    }, [plan]);
 
 
     return (
@@ -197,7 +198,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (authLoading || firebaseLoading || !user || !db) {
-        setDataLoading(false);
+        if (!authLoading && !user) {
+            setDataLoading(false);
+        }
         return;
     };
     

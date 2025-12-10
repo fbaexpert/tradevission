@@ -12,6 +12,7 @@ import {
   doc,
   Timestamp,
   getDoc,
+  getDocs,
 } from "firebase/firestore";
 import {
   Card,
@@ -33,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import Loader from "@/components/shared/loader";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 interface TeamMember {
   id: string;
@@ -41,6 +44,8 @@ interface TeamMember {
   createdAt: Timestamp;
   depositDone: boolean;
   isVip?: boolean;
+  level: 1 | 2;
+  referredBy?: string; // ID of the L1 referrer
 }
 
 interface UserData {
@@ -48,6 +53,9 @@ interface UserData {
   totalTeamDeposit?: number;
   totalReferralBonus?: number;
   totalTeamBonus?: number;
+  level1TeamSize?: number;
+  level2TeamSize?: number;
+  totalTeamCommission?: number;
 }
 
 interface CommanderSettings {
@@ -103,27 +111,60 @@ export default function TeamPage() {
         }
     });
 
-    const teamQuery = query(
-      collection(db, "users"),
-      where("referredBy", "==", user.uid)
-    );
-    const unsubscribeTeam = onSnapshot(teamQuery, async (snapshot) => {
-       const memberPromises = snapshot.docs.map(async (memberDoc) => {
-        const member = { id: memberDoc.id, ...memberDoc.data() } as TeamMember;
-        const coinDocRef = doc(db, 'cpm_coins', member.id);
-        const coinDoc = await getDoc(coinDocRef);
-        member.isVip = coinDoc.exists() && coinDoc.data().amount > 0;
-        return member;
-      });
-      const members = await Promise.all(memberPromises);
-      setTeamMembers(members);
-      setLoading(false);
-    });
+    const fetchTeam = async () => {
+        const allMembers: TeamMember[] = [];
+        
+        // Level 1
+        const l1Query = query(collection(db, "users"), where("referredBy", "==", user.uid));
+        const l1Snapshot = await getDocs(l1Query);
+        const l1Ids = l1Snapshot.docs.map(d => d.id);
+        
+        for(const memberDoc of l1Snapshot.docs) {
+            const memberData = memberDoc.data();
+            const coinDoc = await getDoc(doc(db, "cpm_coins", memberDoc.id));
+            allMembers.push({
+                id: memberDoc.id,
+                ...memberData,
+                level: 1,
+                isVip: coinDoc.exists() && coinDoc.data().amount > 0
+            } as TeamMember);
+        }
+        
+        // Level 2
+        if (l1Ids.length > 0) {
+            // Firestore 'in' query is limited to 30 items
+            const l1Chunks = [];
+            for (let i = 0; i < l1Ids.length; i += 30) {
+                l1Chunks.push(l1Ids.slice(i, i + 30));
+            }
+
+            for (const chunk of l1Chunks) {
+                const l2Query = query(collection(db, "users"), where("referredBy", "in", chunk));
+                const l2Snapshot = await getDocs(l2Query);
+
+                for(const memberDoc of l2Snapshot.docs) {
+                    const memberData = memberDoc.data();
+                    const coinDoc = await getDoc(doc(db, "cpm_coins", memberDoc.id));
+                    allMembers.push({
+                        id: memberDoc.id,
+                        ...memberData,
+                        level: 2,
+                        isVip: coinDoc.exists() && coinDoc.data().amount > 0
+                    } as TeamMember);
+                }
+            }
+        }
+        
+        setTeamMembers(allMembers);
+        setLoading(false);
+    };
+
+    fetchTeam();
+
 
     return () => {
       unsubscribeUser();
       unsubscribeSettings();
-      unsubscribeTeam();
     };
   }, [user]);
 
@@ -134,13 +175,18 @@ export default function TeamPage() {
       member.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [teamMembers, searchTerm]);
+  
+  const l1Members = useMemo(() => filteredMembers.filter(m => m.level === 1), [filteredMembers]);
+  const l2Members = useMemo(() => filteredMembers.filter(m => m.level === 2), [filteredMembers]);
 
   if (authLoading || loading) {
     return <Loader />;
   }
 
+  const totalTeamCommission = (userData?.totalReferralBonus || 0) + (userData?.totalTeamBonus || 0);
+
   return (
-    <div className="space-y-8">
+    <div className="p-4 sm:p-6 md:p-8 space-y-8">
       <Card className="border-border/20 shadow-lg shadow-primary/5 bg-transparent">
         <CardHeader>
           <CardTitle className="flex items-center gap-3 text-3xl font-bold text-white font-headline">
@@ -159,9 +205,9 @@ export default function TeamPage() {
               iconColor="text-yellow-400"
               gradient="bg-gradient-to-br from-yellow-900/40 via-background to-background"
             />
-            <StatCard
-              title="Team Deposit"
-              value={`$${(userData?.totalTeamDeposit || 0).toFixed(2)}`}
+             <StatCard
+              title="Team Commission"
+              value={`$${totalTeamCommission.toFixed(2)}`}
               icon={DollarSign}
               iconColor="text-green-400"
               gradient="bg-gradient-to-br from-green-900/40 via-background to-background"
@@ -194,8 +240,8 @@ export default function TeamPage() {
                   <Gift className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-white text-lg">First Deposit Bonus (15%)</h3>
-                    <p className="text-sm text-muted-foreground mt-1">When your referred member makes their first deposit, you'll receive a 15% bonus of their deposit amount added directly to your balance.</p>
+                    <h3 className="font-bold text-white text-lg">First Deposit Bonus (20%)</h3>
+                    <p className="text-sm text-muted-foreground mt-1">When your directly referred member (Level 1) makes their first deposit, you'll receive a 20% bonus of their deposit amount added directly to your balance.</p>
                 </div>
              </div>
         </div>
@@ -208,87 +254,11 @@ export default function TeamPage() {
                     <Zap className="h-6 w-6 text-green-400" />
                  </div>
                 <div>
-                    <h3 className="font-bold text-white text-lg">Daily Team Bonus (10%)</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Every time a referred member completes their daily task (watches an ad), you'll earn a 10% bonus based on their daily profit.</p>
+                    <h3 className="font-bold text-white text-lg">Daily Team Bonus</h3>
+                    <p className="text-sm text-muted-foreground mt-1">Every time a referred member completes their daily task, you'll earn a bonus based on their daily profit. The bonus is 10% for Level 1 members and 2% for Level 2 members.</p>
                 </div>
             </div>
         </div>
-        <div className="relative p-6 rounded-lg border-2 border-yellow-500/50 bg-gradient-to-br from-yellow-900/40 via-background to-background overflow-hidden group">
-            <div className="absolute -top-12 -right-12 text-yellow-400/10 group-hover:text-yellow-400/20 transition-colors duration-500">
-                <Trophy size={160} strokeWidth={1}/>
-            </div>
-            <div className="absolute inset-0 bg-grid-yellow opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                   <div className="p-3 rounded-full bg-yellow-500/20 border border-yellow-500/30">
-                     <Trophy className="h-8 w-8 text-yellow-400" />
-                   </div>
-                   <div>
-                      <h3 className="font-extrabold text-white text-xl">Super Bonus Rewards</h3>
-                      <p className="text-sm text-yellow-400/80">Unlock exclusive cash rewards for growing your team.</p>
-                   </div>
-                </div>
-                <ul className="space-y-2">
-                {superBonusTiers.map(tier => (
-                    <li key={tier.referrals} className="flex items-center gap-3 text-sm p-3 rounded-md bg-black/20 border border-white/10 backdrop-blur-sm">
-                       <ShieldCheck className="h-5 w-5 text-yellow-500 flex-shrink-0"/>
-                       <div>
-                            <span className="font-bold text-white">{tier.referrals} Team Members</span>
-                            <span className="text-muted-foreground mx-2"> unlocks a </span> 
-                            <span className="font-bold text-green-400 text-base">${tier.bonus} Bonus</span>
-                       </div>
-                    </li>
-                ))}
-                </ul>
-            </div>
-             <style jsx>{`
-                .bg-grid-yellow {
-                    background-image: 
-                        linear-gradient(to right, rgba(234, 179, 8, 0.1) 1px, transparent 1px),
-                        linear-gradient(to bottom, rgba(234, 179, 8, 0.1) 1px, transparent 1px);
-                    background-size: 2rem 2rem;
-                }
-            `}</style>
-        </div>
-        {commanderSettings && (
-             <div className="relative p-6 rounded-lg border-2 border-amber-500/50 bg-gradient-to-br from-amber-900/40 via-background to-background overflow-hidden group">
-                 <div className="absolute -top-12 -right-12 text-amber-400/10 group-hover:text-amber-400/20 transition-colors duration-500">
-                    <Star size={160} strokeWidth={1} />
-                </div>
-                 <div className="relative z-10">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 rounded-full bg-amber-500/20 border border-amber-500/30">
-                            <Star className="h-8 w-8 text-amber-400" />
-                        </div>
-                        <div>
-                            <h3 className="font-extrabold text-white text-xl">Become a Commander</h3>
-                            <p className="text-sm text-amber-400/80">Achieve elite status and unlock exclusive rewards.</p>
-                        </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
-                        <div className="p-3 rounded-md bg-black/20 border border-white/10 backdrop-blur-sm">
-                            <p className="text-xs text-muted-foreground">Requirement</p>
-                            <p className="text-lg font-bold text-white">{commanderSettings.referralRequirement}+ Team Members</p>
-                        </div>
-                         <div className="p-3 rounded-md bg-black/20 border border-white/10 backdrop-blur-sm">
-                           <p className="text-xs text-muted-foreground">Commander Badge</p>
-                           <Badge className="mt-1.5 bg-gradient-to-br from-yellow-400 to-amber-500 text-black border-yellow-600 text-sm shadow-lg shadow-amber-500/40">
-                               <Star className="h-4 w-4 mr-1.5 text-black"/> Commander
-                           </Badge>
-                        </div>
-                        <div className="p-3 rounded-md bg-black/20 border border-white/10 backdrop-blur-sm">
-                            <p className="text-xs text-muted-foreground">Weekly Salary</p>
-                            <p className="text-lg font-bold text-green-400">${commanderSettings.weeklySalary}</p>
-                        </div>
-                        <div className="p-3 rounded-md bg-black/20 border border-white/10 backdrop-blur-sm">
-                            <p className="text-xs text-muted-foreground">Weekly CPM Coins</p>
-                            <p className="text-lg font-bold text-yellow-400">{commanderSettings.weeklyCpmCoins} CPM</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-        <p className="text-xs text-center text-muted-foreground pt-2">Share your referral link from the dashboard to start building your team and earning rewards!</p>
     </div>
 
       <Card className="border-border/20 shadow-lg shadow-primary/5 mt-8">
@@ -297,7 +267,7 @@ export default function TeamPage() {
             <div>
               <CardTitle className="text-xl font-bold text-white">Team Members</CardTitle>
               <CardDescription>
-                A list of all users you have referred.
+                A list of all users you have referred directly and indirectly.
               </CardDescription>
             </div>
             <Input
@@ -309,60 +279,76 @@ export default function TeamPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Signup Date</TableHead>
-                  <TableHead>First Deposit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMembers.map((member) => (
-                  <TableRow key={member.id} className={cn("hover:bg-muted/50", member.isVip && "bg-purple-900/20 hover:bg-purple-900/30")}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{member.name}</span>
-                        {member.isVip && 
-                             <Badge className="bg-gradient-to-br from-purple-600 to-indigo-700 text-yellow-300 border-purple-400 shadow-lg shadow-purple-500/20">
-                                <ShieldCheck className="h-3 w-3 mr-1 text-yellow-400"/> VIP
-                            </Badge>
-                        }
-                      </div>
-                    </TableCell>
-                    <TableCell>{member.email}</TableCell>
-                    <TableCell>
-                      {member.createdAt
-                        ? new Date(
-                            member.createdAt.seconds * 1000
-                          ).toLocaleDateString()
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          member.depositDone ? "default" : "destructive"
-                        }
-                      >
-                        {member.depositDone ? "Completed" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-           {!loading && filteredMembers.length === 0 && (
-            <p className="text-center text-muted-foreground mt-6 py-8">
-              {searchTerm ? "No members match your search." : "You haven't referred anyone yet. Share your link to start!"}
-            </p>
-          )}
+            <Tabs defaultValue="level1">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="level1">Level 1 ({l1Members.length})</TabsTrigger>
+                    <TabsTrigger value="level2">Level 2 ({l2Members.length})</TabsTrigger>
+                </TabsList>
+                <TabsContent value="level1">
+                    {renderTeamTable(l1Members, searchTerm)}
+                </TabsContent>
+                <TabsContent value="level2">
+                     {renderTeamTable(l2Members, searchTerm)}
+                </TabsContent>
+            </Tabs>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-    
+function renderTeamTable(members: TeamMember[], searchTerm: string) {
+    return (
+        <div className="overflow-x-auto mt-4">
+            <Table>
+                <TableHeader>
+                <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Signup Date</TableHead>
+                    <TableHead>First Deposit</TableHead>
+                </TableRow>
+                </TableHeader>
+                <TableBody>
+                {members.map((member) => (
+                    <TableRow key={member.id} className={cn("hover:bg-muted/50", member.isVip && "bg-purple-900/20 hover:bg-purple-900/30")}>
+                    <TableCell>
+                        <div className="flex items-center gap-2">
+                        <span className="font-medium">{member.name}</span>
+                        {member.isVip && 
+                                <Badge className="bg-gradient-to-br from-purple-600 to-indigo-700 text-yellow-300 border-purple-400 shadow-lg shadow-purple-500/20">
+                                <ShieldCheck className="h-3 w-3 mr-1 text-yellow-400"/> VIP
+                            </Badge>
+                        }
+                        </div>
+                    </TableCell>
+                    <TableCell>{member.email}</TableCell>
+                    <TableCell>
+                        {member.createdAt
+                        ? new Date(
+                            member.createdAt.seconds * 1000
+                            ).toLocaleDateString()
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                        <Badge
+                        variant={
+                            member.depositDone ? "default" : "destructive"
+                        }
+                        >
+                        {member.depositDone ? "Completed" : "Pending"}
+                        </Badge>
+                    </TableCell>
+                    </TableRow>
+                ))}
+                </TableBody>
+            </Table>
+            {members.length === 0 && (
+                <p className="text-center text-muted-foreground mt-6 py-8">
+                    {searchTerm ? "No members match your search in this level." : "No members in this level yet."}
+                </p>
+            )}
+        </div>
+    );
+}
+

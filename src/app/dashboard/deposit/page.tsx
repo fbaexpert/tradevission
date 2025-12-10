@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
-import { collection, addDoc, serverTimestamp, writeBatch, doc, onSnapshot, updateDoc, setDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, writeBatch, doc, onSnapshot, updateDoc, setDoc, runTransaction, increment } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
