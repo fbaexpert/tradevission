@@ -4,7 +4,6 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
-import AuthForm from "@/components/auth/auth-form";
 import Loader from "@/components/shared/loader";
 import { Logo } from "@/components/shared/logo";
 import Link from "next/link";
@@ -99,13 +98,13 @@ export default function AuthForm() {
 
   useEffect(() => {
     const refIdFromUrl = searchParams.get('ref');
-    const refIdFromStorage = localStorage.getItem('referralId');
+    const refIdFromStorage = localStorage.getItem('tradevission_ref');
     const finalRefId = refIdFromUrl || refIdFromStorage;
 
     if (finalRefId) {
       setReferralId(finalRefId);
       if (finalRefId !== refIdFromStorage) {
-        localStorage.setItem('referralId', finalRefId);
+        localStorage.setItem('tradevission_ref', finalRefId);
       }
     }
   }, [searchParams]);
@@ -117,12 +116,12 @@ export default function AuthForm() {
         if (docSnap.exists()) {
           setReferrerName(docSnap.data().name);
         } else {
-          localStorage.removeItem('referralId');
+          localStorage.removeItem('tradevission_ref');
           setReferralId(null);
           setReferrerName(null);
         }
       }).catch(() => {
-        localStorage.removeItem('referralId');
+        localStorage.removeItem('tradevission_ref');
         setReferralId(null);
         setReferrerName(null);
       });
@@ -191,84 +190,66 @@ export default function AuthForm() {
     if (!auth || !db) return;
     
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        values.email,
-        values.password
-      );
-      const user = userCredential.user;
+        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+        const user = userCredential.user;
 
-      await updateProfile(user, { displayName: values.name });
+        await updateProfile(user, { displayName: values.name });
       
-      await runTransaction(db, async (transaction) => {
-        const finalReferralId = referralId;
-        
-        let ipAddress = 'N/A';
-        let deviceInfo = 'N/A';
-        try {
-            const response = await fetch('https://api.ipify.org?format=json');
-            const data = await response.json();
-            ipAddress = data.ip;
-            deviceInfo = navigator.userAgent;
-        } catch (e) {
-            console.error("Could not fetch IP/device info:", e);
+        // --- Read settings BEFORE the transaction ---
+        let commanderSettings: CommanderSettings | undefined;
+        let bonusTiers: SuperBonusTier[] = [];
+        const settingsDocRef = doc(db, "system", "settings");
+        const settingsDoc = await getDoc(settingsDocRef);
+        if (settingsDoc.exists()) {
+            const settingsData = settingsDoc.data();
+            commanderSettings = settingsData.commander;
+            bonusTiers = settingsData.superBonusTiers || [];
         }
-
-        const newUserRef = doc(db, "users", user.uid);
-        const userData: any = {
-            name: values.name,
-            email: values.email,
-            phone: values.phone,
-            createdAt: serverTimestamp(),
-            balance: 0,
-            balance0: 0,
-            totalWithdrawn: 0,
-            withdrawalStatus: 'enabled',
-            termsAccepted: true,
-            acceptedAt: serverTimestamp(),
-            depositDone: false,
-            totalReferralBonus: 0,
-            totalTeamBonus: 0,
-            totalTeamDeposit: 0,
-            totalTeamMembers: 0,
-            awardedSuperBonuses: [],
-            isCommander: false,
-            ipAddress: ipAddress,
-            deviceInfo: deviceInfo,
-        };
         
-        if (finalReferralId) {
-            userData.referredBy = finalReferralId;
-        }
-        transaction.set(newUserRef, userData);
-
-        if (finalReferralId) {
-            const referrerRef = doc(db, "users", finalReferralId);
-            const referrerDoc = await transaction.get(referrerRef);
-            if (!referrerDoc.exists()) {
-                throw new Error("Invalid referral code. Please check the link and try again.");
+        // --- Execute atomic writes in a transaction ---
+        await runTransaction(db, async (transaction) => {
+            const finalReferralId = referralId;
+            let ipAddress = 'N/A';
+            let deviceInfo = 'N/A';
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                ipAddress = data.ip;
+                deviceInfo = navigator.userAgent;
+            } catch (e) {
+                console.error("Could not fetch IP/device info:", e);
             }
+
+            const newUserRef = doc(db, "users", user.uid);
+            const userData: any = {
+                name: values.name, email: values.email, phone: values.phone,
+                createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
+                withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
+                depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
+                totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
+                ipAddress: ipAddress, deviceInfo: deviceInfo,
+            };
             
-            const referrerData = referrerDoc.data();
-            
-            transaction.update(referrerRef, {
-                totalTeamMembers: increment(1)
-            });
-            const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
-          
-            const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef); // Use getDoc, not transaction.get for non-transactional reads if possible
-          
-            if (settingsDoc.exists()) {
-                const settingsData = settingsDoc.data();
-                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
+            if (finalReferralId) {
+                const referrerRef = doc(db, "users", finalReferralId);
+                const referrerDoc = await transaction.get(referrerRef);
+                if (!referrerDoc.exists()) {
+                    throw new Error("Invalid referral code. Please check the link and try again.");
+                }
+                
+                userData.referredBy = finalReferralId;
+                const referrerData = referrerDoc.data();
+                const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
+
+                transaction.update(referrerRef, { totalTeamMembers: increment(1) });
+                
+                // Check for Commander promotion
                 if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
                     transaction.update(referrerRef, { isCommander: true });
                 }
 
-                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
+                // Check for Super Bonus Tiers
                 const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
-
                 for (const tier of bonusTiers) {
                     if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
                         transaction.update(referrerRef, {
@@ -278,24 +259,19 @@ export default function AuthForm() {
                     }
                 }
             }
-        }
-      });
+            transaction.set(newUserRef, userData);
+        });
       
-      // Post-transaction notifications
-      if (referralId) {
-        const batch = writeBatch(db);
-        const referrerRef = doc(db, "users", referralId);
-        const referrerDoc = await getDoc(referrerRef);
-        
-        if (referrerDoc.exists()) {
-            const referrerData = referrerDoc.data();
-            const newTeamCount = (referrerData.totalTeamMembers || 0);
+        // --- Post-transaction notifications ---
+        if (referralId) {
+            const batch = writeBatch(db);
+            const referrerRef = doc(db, "users", referralId);
+            const referrerDoc = await getDoc(referrerRef);
+            
+            if (referrerDoc.exists()) {
+                const referrerData = referrerDoc.data();
+                const newTeamCount = (referrerData.totalTeamMembers || 0);
 
-            const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef);
-            if (settingsDoc.exists()) {
-                const settingsData = settingsDoc.data();
-                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
                 if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
                     const notifRef = doc(collection(db, "users", referralId, "notifications"));
                     batch.set(notifRef, {
@@ -304,7 +280,6 @@ export default function AuthForm() {
                         status: 'unread', seen: false, createdAt: serverTimestamp(),
                     });
                 }
-                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
                 for (const tier of bonusTiers) {
                     if (newTeamCount === tier.referrals) {
                         const notifRef = doc(collection(db, "users", referralId, "notifications"));
@@ -315,13 +290,12 @@ export default function AuthForm() {
                         });
                     }
                 }
+                await batch.commit();
             }
-            await batch.commit();
         }
-      }
 
-      localStorage.removeItem('referralId');
-      router.push("/dashboard");
+        localStorage.removeItem('tradevission_ref');
+        router.push("/dashboard");
 
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
