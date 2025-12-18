@@ -12,7 +12,12 @@ service firebase.storage {
     // They can write to a path that includes their user ID.
     // They can't read/list other users' files.
     match /deposit_screenshots/{userId}/{depositId} {
-      allow create, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+     // Allow users to upload their KYC documents.
+    match /kyc_documents/{userId}/{document} {
+      allow create: if request.auth != null && request.auth.uid == userId;
     }
 
     // Admins can read any screenshot or kyc document.
@@ -24,15 +29,10 @@ service firebase.storage {
        allow read: if request.auth != null && request.auth.token.isAdmin == true;
     }
 
-    // Allow users to upload their KYC documents.
-    match /kyc_documents/{userId}/{document} {
-      allow create: if request.auth != null && request.auth.uid == userId;
-    }
-
     // Allow backend functions (like our deleteUser function) to delete files.
     // This rule allows any authenticated app server with a valid service account to perform deletions.
     match /{allPaths=**} {
-        allow delete: if request.auth == null; // Service accounts authenticate as null
+      allow delete: if request.auth == null; // Service accounts authenticate as null
     }
   }
 }

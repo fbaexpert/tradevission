@@ -2,8 +2,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
-// Correctly initialize the Firebase Admin SDK.
-// This is the most important line for the function to work.
 admin.initializeApp();
 
 const db = admin.firestore();
@@ -79,33 +77,26 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     );
   }
 
-  // 2. Delete from Firebase Authentication
-  try {
-    await auth.deleteUser(userIdToDelete);
-    functions.logger.log(`Successfully deleted auth user: ${userIdToDelete}`);
-  } catch (error: any) {
-    if (error.code !== "auth/user-not-found") {
-      throw new functions.https.HttpsError("internal", `Failed to delete auth user: ${error.message}`);
-    }
-    functions.logger.warn(`Auth user ${userIdToDelete} not found, proceeding with database cleanup.`);
-  }
-
   // 3. Delete Firestore Data
   try {
-    const firestorePaths = [
-      `users/${userIdToDelete}/notifications`,
-      `users/${userIdToDelete}/userPlans`,
-      `users/${userIdToDelete}/vipMailbox`,
-      `users/${userIdToDelete}/airdrop_claims`,
-      `users/${userIdToDelete}/supportTickets`,
+    // A) Delete all subcollections first
+    const userSubcollections = [
+      "notifications",
+      "vipMailbox",
+      "airdrop_claims",
     ];
-    
-    // Delete all known subcollections recursively
-    for (const path of firestorePaths) {
-        await deleteCollection(path, 100);
+    for (const subcollection of userSubcollections) {
+        await deleteCollection(`users/${userIdToDelete}/${subcollection}`, 100);
     }
-    
-    // Delete documents from top-level collections
+     // Special handling for nested subcollections like support tickets
+    const supportTicketsSnapshot = await db.collection("supportTickets").where("userId", "==", userIdToDelete).get();
+    for (const ticketDoc of supportTicketsSnapshot.docs) {
+        await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
+    }
+
+
+    // B) Batch delete all top-level documents associated with the user
+    const rootBatch = db.batch();
     const collectionsToClean = [
         { name: "deposits", field: "uid" },
         { name: "withdrawals", field: "userId" },
@@ -114,24 +105,19 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
         { name: "activityLogs", field: "userId" },
         { name: "feedback", field: "userId" },
         { name: "kycSubmissions", field: "userId" },
-        { name: "supportTickets", field: "userId" },
         { name: "userPlans", field: "userId" }
     ];
-    
-    const rootBatch = db.batch();
 
     for (const { name, field } of collectionsToClean) {
         const snapshot = await db.collection(name).where(field, "==", userIdToDelete).get();
         if (!snapshot.empty) {
-            for (const doc of snapshot.docs) {
-                if (name === 'supportTickets') {
-                    await deleteCollection(`supportTickets/${doc.id}/replies`, 100);
-                }
-                rootBatch.delete(doc.ref);
-            }
+            snapshot.docs.forEach((doc) => rootBatch.delete(doc.ref));
         }
     }
     
+    // Also delete from the already cleaned support tickets collection
+    supportTicketsSnapshot.docs.forEach((doc) => rootBatch.delete(doc.ref));
+
     // Delete the main user document and cpm_coin document
     rootBatch.delete(db.collection("users").doc(userIdToDelete));
     rootBatch.delete(db.collection("cpm_coins").doc(userIdToDelete));
@@ -156,6 +142,22 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
           // Do not throw an error for storage deletion failure, just log it.
       }
   }
+  
+    // 2. Delete from Firebase Authentication (do this LAST)
+  try {
+    await auth.deleteUser(userIdToDelete);
+    functions.logger.log(`Successfully deleted auth user: ${userIdToDelete}`);
+  } catch (error: any) {
+    if (error.code !== "auth/user-not-found") {
+      functions.logger.error(`Failed to delete auth user: ${error.message}`);
+      // Don't throw an error if the user is already gone, but do for other errors
+      if(error.code !== 'auth/user-not-found'){
+         throw new functions.https.HttpsError("internal", `Failed to delete auth user: ${error.message}`);
+      }
+    }
+    functions.logger.warn(`Auth user ${userIdToDelete} not found, but data cleanup was successful.`);
+  }
+
 
   return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
 });
@@ -204,13 +206,20 @@ export const resetUserAccount = functions.https.onCall(async (data, context) => 
         { name: "activityLogs", field: "userId" },
         { name: "feedback", field: "userId" },
         { name: "kycSubmissions", field: "userId" },
-        { name: "supportTickets", field: "userId" },
         { name: "userPlans", field: "userId" },
     ];
     for (const { name, field } of collectionsToClean) {
         const snapshot = await db.collection(name).where(field, "==", userIdToReset).get();
         snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     }
+    
+    // Also find and delete support tickets
+    const supportTicketsSnapshot = await db.collection('supportTickets').where('userId', '==', userIdToReset).get();
+    for (const ticketDoc of supportTicketsSnapshot.docs) {
+      await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
+      batch.delete(ticketDoc.ref);
+    }
+
 
     // 3. Delete user's CPM coin document
     batch.delete(db.doc(`cpm_coins/${userIdToReset}`));
@@ -226,10 +235,7 @@ export const resetUserAccount = functions.https.onCall(async (data, context) => 
     for (const sub of subcollectionsToDelete) {
       await deleteCollection(`users/${userIdToReset}/${sub}`, 100);
     }
-     const supportTicketsSnapshot = await db.collection('supportTickets').where('userId', '==', userIdToReset).get();
-      for (const ticketDoc of supportTicketsSnapshot.docs) {
-        await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
-      }
+     
 
     // 5. Log the action
     await db.collection("activityLogs").add({
