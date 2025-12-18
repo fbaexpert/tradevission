@@ -201,36 +201,35 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
 // --- VIP Progress Card Component ---
 const VipProgressCard = ({ tiers, totalDeposit }: { tiers: VipTier[], totalDeposit: number }) => {
     const { currentTier, nextTier, progressPercentage, rank } = useMemo(() => {
-        const sortedTiers = tiers.sort((a, b) => a.minDeposit - b.minDeposit);
         let current: VipTier | null = null;
         let next: VipTier | null = null;
         let currentRank = "Member";
 
-        for (let i = 0; i < sortedTiers.length; i++) {
-            if (totalDeposit >= sortedTiers[i].minDeposit) {
-                current = sortedTiers[i];
-                currentRank = sortedTiers[i].name;
+        for (let i = 0; i < tiers.length; i++) {
+            if (totalDeposit >= tiers[i].minDeposit) {
+                current = tiers[i];
+                currentRank = tiers[i].name;
             } else {
                 if (!next) {
-                    next = sortedTiers[i];
+                    next = tiers[i];
                 }
             }
         }
         
         let progress = 0;
         const startOfRange = current?.minDeposit ?? 0;
-        const endOfRange = next?.minDeposit ?? (current ? current.minDeposit * 2 : 100);
+        const endOfRange = next?.minDeposit ?? (current ? current.minDeposit * 2 || startOfRange + 1 : 100);
 
-        if (endOfRange > startOfRange) {
+        if (totalDeposit >= endOfRange) {
+            progress = 100;
+        } else if (endOfRange > startOfRange) {
             progress = ((totalDeposit - startOfRange) / (endOfRange - startOfRange)) * 100;
-        } else if (totalDeposit >= startOfRange) {
-            progress = 100; // Max tier
         }
         
         return {
             currentTier: current,
             nextTier: next,
-            progressPercentage: Math.min(100, Math.max(0, progress)),
+            progressPercentage: Math.max(0, Math.min(100, progress)),
             rank: currentRank
         };
     }, [tiers, totalDeposit]);
@@ -238,44 +237,71 @@ const VipProgressCard = ({ tiers, totalDeposit }: { tiers: VipTier[], totalDepos
     const glowColor = currentTier?.badgeColor || '#4f46e5';
 
     return (
-        <div className="relative group">
-            <div 
-                className="absolute -inset-0.5 rounded-xl blur-md opacity-40 group-hover:opacity-70 transition duration-1000 animate-tilt"
-                style={{ background: `linear-gradient(135deg, ${glowColor}, hsl(var(--primary)))` }}
+        <div className="relative rounded-2xl bg-slate-900/70 border border-slate-700/50 p-6 overflow-hidden backdrop-blur-sm">
+             <div 
+                className="absolute inset-x-0 top-0 h-40 w-full opacity-30 [mask-image:radial-gradient(ellipse_at_top,transparent_20%,#000)]"
+                style={{ background: `linear-gradient(to top, transparent, ${glowColor})` }}
             ></div>
-            <Card 
-                className="relative border-border/20 shadow-lg"
-                style={{ '--glow-color': glowColor } as React.CSSProperties}
-            >
-                <CardHeader className="flex-row items-center justify-between pb-2">
-                    <div className="flex items-center gap-3">
-                        <Trophy className="h-6 w-6 text-yellow-400" />
-                        <CardTitle className="text-white font-bold">VIP Status</CardTitle>
-                    </div>
-                    <Badge style={{ backgroundColor: currentTier?.badgeColor || 'hsl(var(--muted))' }} className="text-white shadow-lg">{rank}</Badge>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div>
-                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                            <span>${totalDeposit.toFixed(2)}</span>
-                            {nextTier ? <span>Next: ${nextTier.minDeposit}</span> : <span>Max Level</span>}
+            <div className="grid md:grid-cols-3 gap-6 items-center relative z-10">
+                <div className="flex flex-col items-center justify-center">
+                     <div className="relative w-36 h-36">
+                        <svg className="w-full h-full" viewBox="0 0 100 100">
+                            <circle
+                                className="text-slate-800"
+                                stroke="currentColor"
+                                strokeWidth="8"
+                                cx="50"
+                                cy="50"
+                                r="42"
+                                fill="transparent"
+                            />
+                            <circle
+                                className="transition-all duration-1000 ease-in-out"
+                                stroke={glowColor}
+                                strokeWidth="8"
+                                strokeLinecap="round"
+                                cx="50"
+                                cy="50"
+                                r="42"
+                                fill="transparent"
+                                strokeDasharray={2 * Math.PI * 42}
+                                strokeDashoffset={2 * Math.PI * 42 * (1 - progressPercentage / 100)}
+                                transform="rotate(-90 50 50)"
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                            <span className="text-2xl font-bold" style={{ color: glowColor }}>{rank}</span>
+                            <span className="text-xs text-slate-400">VIP Rank</span>
                         </div>
-                        <Progress value={progressPercentage} className="h-2"/>
                     </div>
-                     {nextTier ? (
-                        <div className="text-center space-y-3">
-                            <p className="text-sm text-muted-foreground">
-                                Deposit <span className="font-bold text-primary">${Math.max(0, nextTier.minDeposit - totalDeposit).toFixed(2)}</span> more to reach <span className="font-bold text-white">{nextTier.name}</span> and earn a <span className="font-bold text-primary">{nextTier.bonusPercentage}%</span> deposit bonus!
-                            </p>
-                            <Button asChild size="sm">
+                </div>
+                <div className="md:col-span-2 space-y-4 text-center md:text-left">
+                    {nextTier ? (
+                        <>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Next Level: <span style={{ color: nextTier.badgeColor }}>{nextTier.name}</span></h3>
+                                <p className="text-sm text-slate-400">Deposit <span className="font-bold text-white">${Math.max(0, nextTier.minDeposit - totalDeposit).toFixed(2)}</span> more to unlock a <span className="font-bold text-white">{nextTier.bonusPercentage}% deposit bonus!</span></p>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center text-xs text-slate-400">
+                                    <span>${totalDeposit.toFixed(2)}</span>
+                                    <span>${nextTier.minDeposit.toLocaleString()}</span>
+                                </div>
+                                <Progress value={progressPercentage} className="h-2 bg-slate-700" indicatorClassName="bg-gradient-to-r from-primary to-accent" />
+                            </div>
+                            <Button asChild size="sm" className="mt-2 shadow-lg shadow-primary/20">
                                 <Link href="/dashboard/deposit">Deposit Now</Link>
                             </Button>
-                        </div>
+                        </>
                     ) : (
-                        <p className="text-center text-sm font-bold text-green-400">You have reached the highest VIP level!</p>
+                        <div className="text-center py-6">
+                            <Trophy className="mx-auto h-12 w-12 text-yellow-400" />
+                            <h3 className="mt-2 text-xl font-bold text-white">You've Reached the Top!</h3>
+                            <p className="text-sm text-slate-400">Congratulations on achieving the highest VIP level.</p>
+                        </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         </div>
     )
 }
@@ -336,15 +362,16 @@ export default function Dashboard() {
     });
 
     // UPDATED: Simple query, sort in code.
-    const vipTiersQuery = query(collection(db, "vipTiers"));
+    const vipTiersQuery = query(collection(db, "vipTiers"), where("isEnabled", "==", true));
     const unsubscribeVipTiers = onSnapshot(vipTiersQuery, (snapshot) => {
-        const tiers = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() } as VipTier))
-          .filter(tier => tier.isEnabled); // Filter enabled tiers
+        const tiersData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+        } as Omit<VipTier, 'rank'>));
         
-        tiers.sort((a, b) => a.minDeposit - b.minDeposit); // Sort by minDeposit
-        
-        const rankedTiers = tiers.map((tier, index) => ({...tier, rank: index + 1}));
+        tiersData.sort((a, b) => a.minDeposit - b.minDeposit);
+        const rankedTiers = tiersData.map((tier, index) => ({ ...tier, rank: index + 1 }));
+
         setVipTiers(rankedTiers);
     });
 
