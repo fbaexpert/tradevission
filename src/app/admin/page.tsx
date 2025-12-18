@@ -193,25 +193,28 @@ export default function AdminUsersPage() {
     
     const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
         const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(usersData);
-        setLoading(false);
+        
+        // This structure ensures that we only update the main `users` state once
+        // all the coin data has been fetched, preventing multiple re-renders.
+        const fetchCoinData = async () => {
+            const usersWithCoins = await Promise.all(usersData.map(async (user) => {
+                try {
+                    const coinDocRef = doc(db, "cpm_coins", user.id);
+                    const coinDoc = await getDoc(coinDocRef);
+                    const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
+                    return { ...user, cpmCoins: cpmAmount, isVip: cpmAmount > 0 };
+                } catch (error) {
+                    console.error(`Failed to fetch CPM coins for user ${user.id}:`, error);
+                    // Return user with default coin data on failure
+                    return { ...user, cpmCoins: 0, isVip: false };
+                }
+            }));
+            setUsers(usersWithCoins);
+            setLoading(false);
+        };
+        
+        fetchCoinData();
 
-        // Fetch CPM coins separately and merge them into the user state
-        usersData.forEach(user => {
-            const coinDocRef = doc(db, "cpm_coins", user.id);
-            // Using a separate onSnapshot for each coin doc might be inefficient for very large user bases
-            // but is robust against individual document read failures or non-existence.
-            onSnapshot(coinDocRef, (coinDoc) => {
-                const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
-                setUsers(prevUsers => 
-                    prevUsers.map(u => 
-                        u.id === user.id 
-                            ? { ...u, cpmCoins: cpmAmount, isVip: cpmAmount > 0 } 
-                            : u
-                    )
-                );
-            });
-        });
     }, (error) => {
         console.error("Error fetching users:", error);
         setLoading(false);
@@ -620,52 +623,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleDeleteUser = async (userId: string, userEmail: string) => {
-    if (!functions) {
-        toast({ variant: "destructive", title: "Error", description: "Firebase Functions are not available." });
-        return;
-    }
-    setIsSubmitting(true);
-    try {
-        const deleteUserFunction = httpsCallable(functions, 'deleteUser');
-        const result = await deleteUserFunction({ userId: userId });
-        
-        toast({ title: "User Deletion Initiated", description: `Successfully initiated deletion for user ${userEmail}.` });
-
-    } catch (error: any) {
-        console.error("Error calling deleteUser function:", error);
-        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete user." });
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-  const handleResetUserAccount = async (userToReset: User) => {
-    if (!db || !functions) return;
-    setIsSubmitting(true);
-    try {
-        const resetUserFunction = httpsCallable(functions, 'resetUserAccount');
-        await resetUserFunction({ userId: userToReset.id });
-        toast({ title: "Account Reset", description: `All data for ${userToReset.email} has been reset.` });
-    } catch (error: any) {
-        console.error("Error during account reset:", error);
-        toast({ variant: "destructive", title: "Reset Failed", description: "Could not reset user account data." });
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-
-  const handleDeleteAllTeamMembers = async () => {
-    if (!viewingUser || !db) return;
-    setIsSubmitting(true);
-     for (const member of teamMembers) {
-        await handleDeleteUser(member.id, member.email);
-     }
-    setIsSubmitting(false);
-    toast({ title: "All Team Members Deleted", description: `All referred users of ${viewingUser.email} have been removed.`});
-  }
-
   const handleCpmCoinUpdate = async () => {
     if (!selectedUser || !cpmCoinAmount || !db) return;
     const amount = parseInt(cpmCoinAmount, 10);
@@ -860,55 +817,6 @@ export default function AdminUsersPage() {
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuItem onClick={() => openTeamDialog(user)}>View Team</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger className="text-destructive focus:bg-destructive/20 focus:text-destructive">Reset Account</DropdownMenuSubTrigger>
-                                    <DropdownMenuSubContent>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                 <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/20 focus:text-destructive">Confirm Reset</DropdownMenuItem>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    This will permanently reset all data (balance, plans, history, etc.) for {user.name}. This action cannot be undone.
-                                                </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleResetUserAccount(user)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
-                                                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Reset Account"}
-                                                </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                                <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger className="text-destructive focus:bg-destructive/20 focus:text-destructive">Delete User</DropdownMenuSubTrigger>
-                                    <DropdownMenuSubContent>
-                                         <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/20 focus:text-destructive">Confirm Deletion</DropdownMenuItem>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    This will permanently delete the user {user.name} and all their associated data from Authentication and Firestore. This action cannot be undone.
-                                                </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleDeleteUser(user.id, user.email)} className="bg-destructive hover:bg-destructive/90" disabled={isSubmitting}>
-                                                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete User"}
-                                                </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </DropdownMenuSubContent>
-                                </DropdownMenuSub>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
@@ -1375,27 +1283,6 @@ export default function AdminUsersPage() {
                   Viewing all users referred by {viewingUser?.email}.
                 </DialogDescription>
               </div>
-              <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" disabled={teamMembers.length === 0}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete All Team
-                      </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                      <AlertDialogHeader>
-                          <AlertDialogTitle>Delete all team members?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                              This will permanently delete all {teamMembers.length} referred users for {viewingUser?.name}. This action is irreversible and will delete their accounts.
-                          </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteAllTeamMembers} className="bg-destructive hover:bg-destructive/90">
-                            {isSubmitting ? <LoaderCircle className="animate-spin"/> : 'Yes, Delete All'}
-                          </AlertDialogAction>
-                      </AlertDialogFooter>
-                  </AlertDialogContent>
-              </AlertDialog>
             </div>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto space-y-2 p-1">
@@ -1409,7 +1296,6 @@ export default function AdminUsersPage() {
                                 <TableHead>Name</TableHead>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Joined</TableHead>
-                                <TableHead className="text-right">Action</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1427,29 +1313,6 @@ export default function AdminUsersPage() {
                                     </TableCell>
                                     <TableCell>{member.email}</TableCell>
                                     <TableCell>{member.createdAt?.toDate().toLocaleString()}</TableCell>
-                                    <TableCell className="text-right">
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="text-destructive shrink-0">
-                                                    <Trash2 className="h-4 w-4"/>
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete Team Member?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        Are you sure you want to delete {member.name}'s account? This action is irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDeleteUser(member.id, member.email)} className="bg-destructive hover:bg-destructive/90">
-                                                        Delete
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
