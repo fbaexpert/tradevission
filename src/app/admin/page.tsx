@@ -193,10 +193,9 @@ export default function AdminUsersPage() {
     if (!db) return;
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
-    const unsubscribeUsers = onSnapshot(q, async (querySnapshot) => {
-        const usersData: User[] = [];
-        for (const userDoc of querySnapshot.docs) {
-            if (!userDoc.exists()) continue;
+    const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
+        const usersPromises = querySnapshot.docs.map(async userDoc => {
+            if (!userDoc.exists()) return null;
 
             const user = { id: userDoc.id, ...userDoc.data() } as User;
             
@@ -208,10 +207,13 @@ export default function AdminUsersPage() {
                 console.warn(`Could not fetch CPM coins for user ${user.id}:`, error);
                 user.cpmCoins = 0;
             }
-            usersData.push(user);
-        }
-        setUsers(usersData);
-        setLoading(false);
+            return user;
+        });
+
+        Promise.all(usersPromises).then(usersData => {
+            setUsers(usersData.filter(u => u !== null) as User[]);
+            setLoading(false);
+        });
 
     }, (error) => {
         console.error("Error fetching users:", error);
@@ -676,12 +678,10 @@ export default function AdminUsersPage() {
   const handleDeleteUser = async (user: User) => {
     if (!db) return;
     
-    // Optimistic UI update for "ultra-fast" feel
     setUsers(currentUsers => currentUsers.filter(u => u.id !== user.id));
     setIsSubmitting(true);
 
     try {
-      // Trigger the reliable backend action
       await addDoc(collection(db, "actions"), {
         action: "deleteUser",
         userId: user.id,
@@ -695,8 +695,7 @@ export default function AdminUsersPage() {
         description: `The deletion process for user ${user.email} has started in the background.`,
       });
     } catch (error: any) {
-      // If the action trigger fails, revert the UI and show an error
-      setUsers(users); // Re-add the user to the list
+      setUsers(users); 
       toast({
         variant: "destructive",
         title: "Deletion Failed to Start",
