@@ -108,7 +108,7 @@ export function Footer() {
           </div>
            <div className="mt-12 pt-8 border-t border-border/20 text-center">
                <p className="text-sm text-muted-foreground">
-                  © 2023-2025 TradeVission. All Rights Reserved.
+                  © 2023-2026 TradeVission. All Rights Reserved.
               </p>
            </div>
       </footer>
