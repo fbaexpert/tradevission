@@ -145,15 +145,14 @@ export default function DepositPage() {
     setLoading(true);
     setError(null);
 
-    try {
-        const depositId = doc(collection(db, "deposits")).id;
-        const storageRef = ref(storage, `deposit_screenshots/${user.uid}/${depositId}`);
-        const snapshot = await uploadBytes(storageRef, screenshotFile);
-        const downloadURL = await getDownloadURL(snapshot.ref);
+    const depositId = doc(collection(db, "deposits")).id;
+    const currentScreenshotFile = screenshotFile;
 
+    try {
         const batch = writeBatch(db);
         const depositRef = doc(db, "deposits", depositId);
         
+        // Submit the record immediately without the screenshot URL
         batch.set(depositRef, {
             uid: user.uid,
             email: user.email,
@@ -161,7 +160,7 @@ export default function DepositPage() {
             method: 'crypto',
             network: 'TRC20',
             tid: tid,
-            screenshotUrl: downloadURL,
+            screenshotUrl: null, // Set to null initially
             status: "pending",
             createdAt: serverTimestamp(),
         });
@@ -188,11 +187,34 @@ export default function DepositPage() {
             description: "Your request is pending approval. You will be notified shortly.",
         });
 
+        // Now, navigate away immediately
         router.push("/dashboard");
+        
+        // Start the upload in the background
+        const uploadTask = async () => {
+            try {
+                const storageRef = ref(storage, `deposit_screenshots/${user.uid}/${depositId}`);
+                const snapshot = await uploadBytes(storageRef, currentScreenshotFile);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                // Update the document with the URL after upload is complete
+                await updateDoc(depositRef, { screenshotUrl: downloadURL });
+            } catch (uploadError) {
+                console.error("Background upload failed:", uploadError);
+                // Optionally, add an error log to Firestore for the admin to see
+                await addDoc(collection(db, "uploadErrors"), {
+                    userId: user.uid,
+                    depositId: depositId,
+                    error: "Screenshot upload failed.",
+                    timestamp: serverTimestamp()
+                });
+            }
+        };
+
+        uploadTask(); // Fire and forget
 
     } catch (err: any) {
         setError(err.message || "Failed to submit deposit request.");
-        setLoading(false);
+        setLoading(false); // Only stop loading on initial failure
     }
   };
 
