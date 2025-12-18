@@ -193,14 +193,14 @@ export default function AdminUsersPage() {
     
     const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
         const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        
-        // This ensures that when a user is deleted from Firestore (manually or otherwise),
-        // they are immediately removed from the local state.
         setUsers(usersData);
-        
-        // Separately, fetch CPM coins for existing users to avoid crashing on deletion
+        setLoading(false);
+
+        // Fetch CPM coins separately and merge them into the user state
         usersData.forEach(user => {
             const coinDocRef = doc(db, "cpm_coins", user.id);
+            // Using a separate onSnapshot for each coin doc might be inefficient for very large user bases
+            // but is robust against individual document read failures or non-existence.
             onSnapshot(coinDocRef, (coinDoc) => {
                 const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
                 setUsers(prevUsers => 
@@ -212,12 +212,14 @@ export default function AdminUsersPage() {
                 );
             });
         });
-        
+    }, (error) => {
+        console.error("Error fetching users:", error);
         setLoading(false);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch user data." });
     });
 
     return () => unsubscribeUsers();
-  }, [db]);
+  }, [db, toast]);
 
   useEffect(() => {
     if (viewingUser && db) {
@@ -628,9 +630,7 @@ export default function AdminUsersPage() {
         const deleteUserFunction = httpsCallable(functions, 'deleteUser');
         const result = await deleteUserFunction({ userId: userId });
         
-        // The user will be removed from the list via the real-time listener.
-        // We just need to show the toast message.
-        toast({ title: "User Deletion Initiated", description: `Successfully deleted user ${userEmail}.` });
+        toast({ title: "User Deletion Initiated", description: `Successfully initiated deletion for user ${userEmail}.` });
 
     } catch (error: any) {
         console.error("Error calling deleteUser function:", error);
