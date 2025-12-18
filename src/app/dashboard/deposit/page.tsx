@@ -160,7 +160,6 @@ export default function DepositPage() {
             amount: depositAmount,
             method: 'crypto',
             network: 'TRC20',
-            walletOrIban: CRYPTO_WALLET_ADDRESS,
             tid: tid,
             screenshotUrl: downloadURL,
             status: "pending",
