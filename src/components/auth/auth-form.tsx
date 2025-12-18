@@ -45,7 +45,7 @@ import * as z from "zod";
 import { useFirebase } from "@/lib/firebase/provider";
 
 const signUpSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  name: z.string().min(3, { message: "Name must be at least 3 characters." }),
   email: z.string().email({ message: "Please enter a valid email." }),
   phone: z.string().min(10, { message: "Please enter a valid phone number." }),
   password: z
@@ -190,6 +190,24 @@ export default function AuthForm() {
     if (!auth || !db) return;
 
     try {
+        // --- Uniqueness Checks ---
+        const usersRef = collection(db, "users");
+        
+        // 1. Check for unique username (case-insensitive)
+        const nameQuery = query(usersRef, where("name_lowercase", "==", values.name.toLowerCase()));
+        const nameSnapshot = await getDocs(nameQuery);
+        if (!nameSnapshot.empty) {
+            throw new Error("This username is already taken. Please choose another one.");
+        }
+
+        // 2. Check for unique phone number
+        const phoneQuery = query(usersRef, where("phone", "==", values.phone));
+        const phoneSnapshot = await getDocs(phoneQuery);
+        if (!phoneSnapshot.empty) {
+            throw new Error("An account with this phone number already exists.");
+        }
+
+        // --- Create User (Firebase Auth already checks for unique email) ---
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
         const user = userCredential.user;
 
@@ -207,13 +225,19 @@ export default function AuthForm() {
             console.error("Could not fetch IP/device info:", e);
         }
 
-        // Create new user document
+        // --- Firestore Writes ---
         const newUserRef = doc(db, "users", user.uid);
         const userData: any = {
-            name: values.name, email: values.email, phone: values.phone,
-            createdAt: serverTimestamp(), balance: 0, balance0: 0, totalWithdrawn: 0,
-            withdrawalStatus: 'enabled', termsAccepted: true, acceptedAt: serverTimestamp(),
-            depositDone: false, totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
+            name: values.name,
+            name_lowercase: values.name.toLowerCase(), // For case-insensitive query
+            email: values.email, 
+            phone: values.phone,
+            createdAt: serverTimestamp(), 
+            balance: 0, balance0: 0, totalWithdrawn: 0,
+            withdrawalStatus: 'enabled', 
+            termsAccepted: true, acceptedAt: serverTimestamp(),
+            depositDone: false, 
+            totalReferralBonus: 0, totalTeamBonus: 0, totalTeamDeposit: 0,
             totalTeamMembers: 0, awardedSuperBonuses: [], isCommander: false,
             ipAddress: ipAddress, deviceInfo: deviceInfo,
         };
@@ -221,61 +245,45 @@ export default function AuthForm() {
             userData.referredBy = referralId;
         }
         
-        await setDoc(newUserRef, userData);
-        
-        // If there's a referrer, update their data in a transaction
-        if (referralId) {
-            const referrerRef = doc(db, "users", referralId);
-            const settingsDocRef = doc(db, "system", "settings");
+        // This transaction ensures all database writes succeed or fail together.
+        await runTransaction(db, async (transaction) => {
+            transaction.set(newUserRef, userData);
 
-            await runTransaction(db, async (transaction) => {
-                const [referrerDoc, settingsDoc] = await Promise.all([
-                    transaction.get(referrerRef),
-                    getDoc(settingsDocRef) // Reading settings outside transaction is fine, but can be done here too for consistency
-                ]);
-
+            if (referralId) {
+                const referrerRef = doc(db, "users", referralId);
+                const referrerDoc = await transaction.get(referrerRef);
                 if (!referrerDoc.exists()) {
                     throw new Error("Invalid referral code. Referrer not found.");
                 }
-
-                transaction.update(referrerRef, { totalTeamMembers: increment(1) });
                 
-                // Bonus/Promotion Logic
+                transaction.update(referrerRef, { 
+                    totalTeamMembers: increment(1) 
+                });
+            }
+        });
+
+        // Post-transaction tasks (notifications) can be done here if needed
+        if (referralId) {
+            const settingsDocRef = doc(db, "system", "settings");
+            const referrerRef = doc(db, "users", referralId);
+
+            const [referrerDoc, settingsDoc] = await Promise.all([
+                getDoc(referrerRef),
+                getDoc(settingsDocRef)
+            ]);
+
+            if (referrerDoc.exists()) {
                 const referrerData = referrerDoc.data();
                 const settingsData = settingsDoc.exists() ? settingsDoc.data() : {};
                 const commanderSettings: CommanderSettings | undefined = settingsData.commander;
                 const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
-                
-                const newTeamCount = (referrerData.totalTeamMembers || 0) + 1;
-                const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
+                const newTeamCount = (referrerData.totalTeamMembers || 0);
+
+                const batch = writeBatch(db);
 
                 // Commander Promotion Check
                 if (commanderSettings && !referrerData.isCommander && newTeamCount >= commanderSettings.referralRequirement) {
-                    transaction.update(referrerRef, { isCommander: true });
-                }
-                
-                // Super Bonus Check
-                for (const tier of bonusTiers) {
-                    if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
-                        transaction.update(referrerRef, {
-                            balance0: increment(tier.bonus),
-                            awardedSuperBonuses: [...awardedBonuses, tier.referrals]
-                        });
-                    }
-                }
-            });
-
-            // Send notifications outside the transaction
-            const batch = writeBatch(db);
-            const referrerDocAfter = await getDoc(referrerRef);
-            if (referrerDocAfter.exists()) {
-                const referrerData = referrerDocAfter.data();
-                const newTeamCount = referrerData.totalTeamMembers || 0;
-                const settingsData = (await getDoc(settingsDocRef)).data() || {};
-                const commanderSettings: CommanderSettings | undefined = settingsData.commander;
-                const bonusTiers: SuperBonusTier[] = settingsData.superBonusTiers || [];
-
-                if (commanderSettings && referrerData.isCommander && newTeamCount === commanderSettings.referralRequirement) {
+                    batch.update(referrerRef, { isCommander: true });
                     const notifRef = doc(collection(db, "users", referralId, "notifications"));
                     batch.set(notifRef, {
                         userId: referralId, type: 'success', title: '🏆 Rank Promotion: Commander!',
@@ -283,8 +291,15 @@ export default function AuthForm() {
                         status: 'unread', seen: false, createdAt: serverTimestamp(),
                     });
                 }
+
+                // Super Bonus Check
                 for (const tier of bonusTiers) {
-                    if (newTeamCount === tier.referrals && !(referrerData.awardedSuperBonuses || []).includes(tier.referrals)) {
+                    const awardedBonuses: number[] = referrerData.awardedSuperBonuses || [];
+                    if (newTeamCount >= tier.referrals && !awardedBonuses.includes(tier.referrals)) {
+                        batch.update(referrerRef, {
+                            balance0: increment(tier.bonus),
+                            awardedSuperBonuses: [...awardedBonuses, tier.referrals]
+                        });
                         const notifRef = doc(collection(db, "users", referralId, "notifications"));
                         batch.set(notifRef, {
                             userId: referralId, type: 'success', title: '🏆 Super Bonus Unlocked!',
