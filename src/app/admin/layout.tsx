@@ -38,6 +38,7 @@ import {
   KeyRound,
   FlipVertical,
   ShieldCheck,
+  Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,7 @@ const ADMIN_EMAIL = "ummarfarooq38990@gmail.com";
 const navItems = [
   { href: "/admin", icon: Users, label: "Users" },
   { href: "/admin/kyc", icon: ShieldCheck, label: "KYC Submissions" },
+  { href: "/admin/vip-tiers", icon: Trophy, label: "VIP Tiers" },
   { href: "/admin/commander-rewards", icon: Star, label: "Commander Rewards" },
   { href: "/admin/plans", icon: Package, label: "Manage Plans" },
   { href: "/admin/spin-win", icon: Star, label: "Spin & Win Settings" },
