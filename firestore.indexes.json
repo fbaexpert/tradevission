@@ -115,6 +115,14 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "submittedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "vipTiers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isEnabled", "order": "ASCENDING" },
+        { "fieldPath": "minDeposit", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
