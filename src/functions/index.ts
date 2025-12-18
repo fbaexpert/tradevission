@@ -28,19 +28,24 @@ export const handleAdminAction = functions.runWith({timeoutSeconds: 60, memory: 
       }
 
       try {
-        functions.logger.log(`Starting simple deletion for user: ${userId}`);
+        functions.logger.log(`Starting deletion for user: ${userId}`);
 
         // Step 1: Delete user from Firebase Authentication
         await auth.deleteUser(userId);
         functions.logger.log(`Successfully deleted auth user: ${userId}`);
 
+        const batch = db.batch();
+
         // Step 2: Delete main user document from Firestore
-        await db.collection('users').doc(userId).delete();
-        functions.logger.log(`Deleted main user document for: ${userId}`);
+        const userDocRef = db.collection('users').doc(userId);
+        batch.delete(userDocRef);
 
         // Step 3 (Optional but good practice): Delete associated CPM coin document
-        await db.collection('cpm_coins').doc(userId).delete();
-        functions.logger.log(`Deleted cpm_coins document for: ${userId}`);
+        const cpmCoinDocRef = db.collection('cpm_coins').doc(userId);
+        batch.delete(cpmCoinDocRef);
+
+        await batch.commit();
+        functions.logger.log(`Deleted Firestore documents for: ${userId}`);
         
         // Final Step: Update the action status to 'completed'
         await snap.ref.update({ status: 'completed' });

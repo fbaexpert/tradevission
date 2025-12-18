@@ -19,10 +19,7 @@ import {
   getDocs,
   where,
   setDoc,
-  Query,
-  DocumentReference,
   addDoc,
-  arrayUnion
 } from "firebase/firestore";
 import {
   Card,
@@ -152,7 +149,7 @@ const typeColors: { [key: string]: string } = {
 
 
 export default function AdminUsersPage() {
-  const { db, functions } = useFirebase();
+  const { db } = useFirebase();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -678,10 +675,12 @@ export default function AdminUsersPage() {
   const handleDeleteUser = async (user: User) => {
     if (!db) return;
     
+    // Instant UI update for a fast feel
     setUsers(currentUsers => currentUsers.filter(u => u.id !== user.id));
     setIsSubmitting(true);
 
     try {
+      // Trigger the backend function by creating an action document
       await addDoc(collection(db, "actions"), {
         action: "deleteUser",
         userId: user.id,
@@ -695,6 +694,7 @@ export default function AdminUsersPage() {
         description: `The deletion process for user ${user.email} has started in the background.`,
       });
     } catch (error: any) {
+      // If queuing fails, revert the UI change and show an error
       setUsers(users); 
       toast({
         variant: "destructive",
@@ -868,7 +868,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This will queue the user <span className="font-bold text-white">{user.email}</span> for permanent deletion of all their data. This action is irreversible.
+                                        This will queue the user <span className="font-bold text-white">{user.email}</span> for permanent deletion. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
