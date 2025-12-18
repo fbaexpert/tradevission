@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from "react";
 import { useFirebase } from "@/lib/firebase/provider";
-import { httpsCallable } from "firebase/functions";
 import {
   collection,
   onSnapshot,
@@ -204,7 +203,8 @@ export default function AdminUsersPage() {
           user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
           user.isVip = user.cpmCoins > 0;
         } catch (error) {
-          console.warn(`Could not fetch CPM coins for deleted or invalid user ${user.id}:`, error);
+          // This can happen if a user is deleted but their data is still being processed
+          // It's safe to just set defaults here
           user.cpmCoins = 0;
           user.isVip = false;
         }
@@ -675,27 +675,34 @@ export default function AdminUsersPage() {
     }
   }
 
-  const handleDeleteUser = async (userId: string, userEmail: string) => {
+  const handleDeleteUser = async (user: User) => {
     if (!db) return;
+    
+    // Optimistic UI update for "ultra-fast" feel
+    setUsers(currentUsers => currentUsers.filter(u => u.id !== user.id));
     setIsSubmitting(true);
+
     try {
+      // Trigger the reliable backend action
       await addDoc(collection(db, "actions"), {
         action: "deleteUser",
-        userId: userId,
+        userId: user.id,
         status: "pending",
         triggeredBy: "admin",
         createdAt: serverTimestamp(),
       });
 
       toast({
-        title: "Deletion Queued",
-        description: `The deletion process for user ${userEmail} has started.`,
+        title: "Deletion in Progress",
+        description: `The deletion process for user ${user.email} has started in the background.`,
       });
     } catch (error: any) {
+      // If the action trigger fails, revert the UI and show an error
+      setUsers(users); // Re-add the user to the list
       toast({
         variant: "destructive",
-        title: "Deletion Failed",
-        description: error.message || "An internal error occurred.",
+        title: "Deletion Failed to Start",
+        description: error.message || "Could not queue the user for deletion.",
       });
     } finally {
       setIsSubmitting(false);
@@ -866,10 +873,15 @@ export default function AdminUsersPage() {
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         disabled={isSubmitting}
-                                        onClick={() => handleDeleteUser(user.id, user.email)}
+                                        onClick={() => handleDeleteUser(user)}
                                         className="bg-destructive hover:bg-destructive/90"
                                       >
-                                        {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete User"}
+                                        {isSubmitting ? (
+                                           <>
+                                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                            Deleting...
+                                           </>
+                                        ) : "Yes, Delete User"}
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
