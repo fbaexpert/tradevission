@@ -191,29 +191,29 @@ export default function AdminUsersPage() {
     if (!db) return;
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
-    const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
-        const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    const unsubscribeUsers = onSnapshot(q, async (querySnapshot) => {
+      const usersData: User[] = [];
+      const userPromises = querySnapshot.docs.map(async (userDoc) => {
+        if (!userDoc.exists()) return null;
+
+        const user = { id: userDoc.id, ...userDoc.data() } as User;
         
-        // This structure ensures that we only update the main `users` state once
-        // all the coin data has been fetched, preventing multiple re-renders.
-        const fetchCoinData = async () => {
-            const usersWithCoins = await Promise.all(usersData.map(async (user) => {
-                try {
-                    const coinDocRef = doc(db, "cpm_coins", user.id);
-                    const coinDoc = await getDoc(coinDocRef);
-                    const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
-                    return { ...user, cpmCoins: cpmAmount, isVip: cpmAmount > 0 };
-                } catch (error) {
-                    console.error(`Failed to fetch CPM coins for user ${user.id}:`, error);
-                    // Return user with default coin data on failure
-                    return { ...user, cpmCoins: 0, isVip: false };
-                }
-            }));
-            setUsers(usersWithCoins);
-            setLoading(false);
-        };
-        
-        fetchCoinData();
+        try {
+          const coinDocRef = doc(db, "cpm_coins", user.id);
+          const coinDoc = await getDoc(coinDocRef);
+          user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
+          user.isVip = user.cpmCoins > 0;
+        } catch (error) {
+          console.error(`Failed to fetch CPM coins for user ${user.id}:`, error);
+          user.cpmCoins = 0;
+          user.isVip = false;
+        }
+        return user;
+      });
+
+      const resolvedUsers = (await Promise.all(userPromises)).filter(user => user !== null) as User[];
+      setUsers(resolvedUsers);
+      setLoading(false);
 
     }, (error) => {
         console.error("Error fetching users:", error);
@@ -675,6 +675,30 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleDeleteUser = async (userId: string, userEmail: string) => {
+    setIsSubmitting(true);
+    const deleteUserFn = httpsCallable(functions, 'deleteUser');
+    try {
+      const result = await deleteUserFn({ userId });
+      if ((result.data as any).success) {
+        toast({
+          title: "User Deleted",
+          description: `User ${userEmail} has been permanently deleted.`,
+        });
+      } else {
+        throw new Error((result.data as any).message || 'Failed to delete user.');
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: error.message || "An internal error occurred.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const filteredUsers = users.filter(
     (user) =>
@@ -817,6 +841,36 @@ export default function AdminUsersPage() {
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuItem onClick={() => openTeamDialog(user)}>View Team</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem
+                                      onSelect={(e) => e.preventDefault()}
+                                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete User
+                                    </DropdownMenuItem>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the user account for <span className="font-bold text-white">{user.email}</span> and all of their associated data.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        disabled={isSubmitting}
+                                        onClick={() => handleDeleteUser(user.id, user.email)}
+                                        className="bg-destructive hover:bg-destructive/90"
+                                      >
+                                        {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete User"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
