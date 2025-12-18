@@ -4,10 +4,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
-import { doc, collection, query, where, Timestamp, onSnapshot } from "firebase/firestore";
+import { doc, collection, query, where, Timestamp, onSnapshot, orderBy } from "firebase/firestore";
 import Link from "next/link";
 import Loader from "@/components/shared/loader";
-import { User, Mail, Calendar, AlertCircle, DollarSign, Tv, ArrowUpFromDot, Zap, CalendarDays, Rocket, Copy, Users2, ShieldCheck, Coins, Clock, Briefcase, UsersRound, Star } from "lucide-react";
+import { User, Mail, Calendar, AlertCircle, DollarSign, Tv, ArrowUpFromDot, Zap, CalendarDays, Rocket, Copy, Users2, ShieldCheck, Coins, Clock, Briefcase, UsersRound, Star, Trophy } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -24,6 +24,8 @@ import SimulatedActivityFeed from "@/components/shared/activity-feed";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { VipTier } from "@/app/admin/vip-tiers/page";
+
 
 // --- Data Interfaces ---
 interface CustomBadge {
@@ -43,6 +45,7 @@ interface UserData {
   totalTeamBonus?: number;
   isCommander?: boolean;
   customBadges?: CustomBadge[];
+  totalDeposit?: number; // Added for VIP progress
 }
 
 interface UserPlan {
@@ -183,6 +186,83 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
     );
 }
 
+// --- VIP Progress Card Component ---
+const VipProgressCard = ({ tiers, totalDeposit }: { tiers: VipTier[], totalDeposit: number }) => {
+    const { currentTier, nextTier, progressPercentage, rank } = useMemo(() => {
+        const sortedTiers = tiers.sort((a, b) => a.minDeposit - b.minDeposit);
+        let current: VipTier | null = null;
+        let next: VipTier | null = null;
+
+        for (let i = sortedTiers.length - 1; i >= 0; i--) {
+            if (totalDeposit >= sortedTiers[i].minDeposit) {
+                current = sortedTiers[i];
+                if (i + 1 < sortedTiers.length) {
+                    next = sortedTiers[i+1];
+                }
+                break;
+            }
+        }
+        
+        if (!current && sortedTiers.length > 0) {
+            next = sortedTiers[0];
+        }
+
+        let progress = 0;
+        if (current && next) {
+            const range = next.minDeposit - current.minDeposit;
+            const progressInRange = totalDeposit - current.minDeposit;
+            progress = (progressInRange / range) * 100;
+        } else if (!current && next) { // Progress towards the first tier
+            progress = (totalDeposit / next.minDeposit) * 100;
+        } else if (current && !next) { // Max tier reached
+            progress = 100;
+        }
+        
+        return {
+            currentTier: current,
+            nextTier: next,
+            progressPercentage: Math.min(100, progress),
+            rank: current ? `VIP ${current.rank}` : "Member"
+        };
+    }, [tiers, totalDeposit]);
+    
+    return (
+        <Card className="border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="flex-row items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Trophy className="h-6 w-6 text-yellow-400" />
+                    <CardTitle className="text-white font-bold">VIP Progress</CardTitle>
+                </div>
+                 {currentTier ? (
+                    <Badge style={{ backgroundColor: currentTier.badgeColor }} className="text-white shadow-lg">{currentTier.name}</Badge>
+                ) : (
+                    <Badge variant="outline">Member</Badge>
+                )}
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-3">
+                    <div>
+                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                            <span>Total Deposits: ${totalDeposit.toFixed(2)}</span>
+                            {nextTier && <span>Next: ${nextTier.minDeposit} for {nextTier.name}</span>}
+                        </div>
+                        <Progress value={progressPercentage} className="h-2"/>
+                    </div>
+                     {nextTier ? (
+                        <p className="text-center text-sm text-muted-foreground">
+                            Deposit ${Math.max(0, nextTier.minDeposit - totalDeposit).toFixed(2)} more to reach the next level.
+                        </p>
+                    ) : currentTier ? (
+                        <p className="text-center text-sm font-bold text-green-400">You have reached the highest VIP level!</p>
+                    ) : (
+                         <p className="text-center text-sm text-muted-foreground">Make a deposit to start your VIP journey.</p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -192,6 +272,7 @@ export default function Dashboard() {
   const [userPlans, setUserPlans] = useState<UserPlan[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cpmCoinData, setCpmCoinData] = useState<CpmCoinData | null>(null);
+  const [vipTiers, setVipTiers] = useState<VipTier[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,6 +313,13 @@ export default function Dashboard() {
         setCpmCoinData(doc.exists() ? doc.data() as CpmCoinData : null);
     });
 
+    const vipTiersQuery = query(collection(db, "vipTiers"), orderBy("minDeposit", "asc"));
+    const unsubscribeVipTiers = onSnapshot(vipTiersQuery, (snapshot) => {
+        const tiers = snapshot.docs.map((doc, index) => ({ id: doc.id, rank: index + 1, ...doc.data()} as VipTier));
+        setVipTiers(tiers);
+    });
+
+
     let deposits: Transaction[] = [];
     let withdrawals: Transaction[] = [];
     
@@ -258,6 +346,7 @@ export default function Dashboard() {
         unsubscribeUser();
         unsubscribePlans();
         unsubscribeCpmCoin();
+        unsubscribeVipTiers();
         unsubscribeDeposits();
         unsubscribeWithdrawals();
     };
@@ -416,6 +505,8 @@ export default function Dashboard() {
                             </div>
                         </div>
                     </div>
+                    
+                    {vipTiers.length > 0 && <VipProgressCard tiers={vipTiers} totalDeposit={userData.totalDeposit || 0} />}
 
                     {userPlans.length > 0 ? (
                         <div className="grid gap-6 md:grid-cols-2">

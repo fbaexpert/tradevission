@@ -38,6 +38,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Image from 'next/image';
 import { useFirebase } from "@/lib/firebase/provider";
+import { VipTier } from "@/app/admin/vip-tiers/page";
 
 interface DepositRequest {
   id: string;
@@ -59,6 +60,7 @@ export default function AdminDepositsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { toast } = useToast();
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
+  const [vipTiers, setVipTiers] = useState<VipTier[]>([]);
 
   useEffect(() => {
     if (!db || firebaseLoading) return;
@@ -73,8 +75,17 @@ export default function AdminDepositsPage() {
       setDeposits(allDeposits.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds));
       setLoading(false);
     });
+    
+    const tiersQuery = query(collection(db, "vipTiers"), where("isEnabled", "==", true), orderBy("minDeposit", "asc"));
+    const unsubscribeTiers = onSnapshot(tiersQuery, (snapshot) => {
+        const tiers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VipTier));
+        setVipTiers(tiers);
+    });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubscribeTiers();
+    };
   }, [db, firebaseLoading]);
 
   const handleUpdate = async (
@@ -89,22 +100,22 @@ export default function AdminDepositsPage() {
         const depositDocRef = doc(db, "deposits", deposit.id);
         const userDocRef = doc(db, "users", deposit.uid);
 
-        // --- READS ---
         const userDoc = await transaction.get(userDocRef);
         if (!userDoc.exists()) {
           throw new Error("User not found.");
         }
         const userData = userDoc.data();
 
-        // --- WRITES ---
         transaction.update(depositDocRef, { status: newStatus });
 
         if (newStatus === "approved") {
             let totalAmountToAdd = deposit.amount;
+            let currentTotalDeposit = userData.totalDeposit || 0;
+            const newTotalDeposit = currentTotalDeposit + deposit.amount;
 
             // Deposit Boost Check
             const settingsDocRef = doc(db, "system", "settings");
-            const settingsDoc = await getDoc(settingsDocRef); // getDoc is fine inside transaction for read-only config
+            const settingsDoc = await getDoc(settingsDocRef);
             if (settingsDoc.exists()) {
                 const settings = settingsDoc.data();
                 const boost = settings.depositBoost;
@@ -114,8 +125,21 @@ export default function AdminDepositsPage() {
                 }
             }
 
+            // VIP Tier Bonus
+            let highestApplicableTier: VipTier | null = null;
+            for(const tier of vipTiers) {
+                if (newTotalDeposit >= tier.minDeposit) {
+                    highestApplicableTier = tier;
+                }
+            }
+            if(highestApplicableTier && highestApplicableTier.bonusPercentage > 0) {
+                 const tierBonus = deposit.amount * (highestApplicableTier.bonusPercentage / 100);
+                 totalAmountToAdd += tierBonus;
+            }
+
             transaction.update(userDocRef, { 
                 balance0: increment(totalAmountToAdd),
+                totalDeposit: newTotalDeposit,
                 depositDone: true
             });
 
@@ -135,7 +159,6 @@ export default function AdminDepositsPage() {
             // Team Deposit Update
             if (userData.referredBy) {
                 const referrerRef = doc(db, "users", userData.referredBy);
-                // Check if referrer exists before attempting update
                 const referrerDoc = await transaction.get(referrerRef);
                 if (referrerDoc.exists()) {
                     transaction.update(referrerRef, {
@@ -146,7 +169,6 @@ export default function AdminDepositsPage() {
         }
       });
       
-      // Post-transaction writes (notifications, logs)
       const batch = writeBatch(db);
       const userDocRef = doc(db, "users", deposit.uid);
       const userDoc = await getDoc(userDocRef);
