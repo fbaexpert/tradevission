@@ -286,7 +286,7 @@ export default function PlansPage() {
         const adminAlertRef = doc(collection(db, "adminAlerts"));
         batch.set(adminAlertRef, {
             type: 'vip_code_earned',
-            message: `User ${user.email} purchased plan "${plan.planName}" and is eligible for a free VIP code.`,
+            message: `User ${user.email} purchased package "${plan.planName}" and is eligible for a free VIP code.`,
             userId: user.uid,
             userEmail: user.email,
             relatedId: userPlanRef.id,
