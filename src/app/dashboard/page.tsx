@@ -335,10 +335,17 @@ export default function Dashboard() {
         setCpmCoinData(doc.exists() ? doc.data() as CpmCoinData : null);
     });
 
-    const vipTiersQuery = query(collection(db, "vipTiers"), where("isEnabled", "==", true), orderBy("minDeposit", "asc"));
+    // UPDATED: Simple query, sort in code.
+    const vipTiersQuery = query(collection(db, "vipTiers"));
     const unsubscribeVipTiers = onSnapshot(vipTiersQuery, (snapshot) => {
-        const tiers = snapshot.docs.map((doc, index) => ({ id: doc.id, rank: index + 1, ...doc.data()} as VipTier));
-        setVipTiers(tiers);
+        const tiers = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as VipTier))
+          .filter(tier => tier.isEnabled); // Filter enabled tiers
+        
+        tiers.sort((a, b) => a.minDeposit - b.minDeposit); // Sort by minDeposit
+        
+        const rankedTiers = tiers.map((tier, index) => ({...tier, rank: index + 1}));
+        setVipTiers(rankedTiers);
     });
 
 
@@ -596,5 +603,3 @@ export default function Dashboard() {
     </>
   );
 }
-
-    

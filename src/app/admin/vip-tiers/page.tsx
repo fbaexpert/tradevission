@@ -89,14 +89,19 @@ export default function VipTiersPage() {
   useEffect(() => {
     if (!db) return;
     setLoading(true);
-    const q = query(collection(db, "vipTiers"), orderBy("minDeposit", "asc"));
+    // UPDATED: Simple query
+    const q = query(collection(db, "vipTiers"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        const tiersData = snapshot.docs.map((doc, index) => ({
+        // UPDATED: Client-side sorting and ranking
+        const tiersData = snapshot.docs.map(doc => ({
             id: doc.id,
-            rank: index + 1,
             ...doc.data(),
-        } as VipTier));
-        setTiers(tiersData);
+        } as Omit<VipTier, 'rank'>));
+        
+        tiersData.sort((a, b) => a.minDeposit - b.minDeposit);
+        const rankedTiers = tiersData.map((tier, index) => ({ ...tier, rank: index + 1 }));
+
+        setTiers(rankedTiers);
         setLoading(false);
     });
     return () => unsubscribe();
