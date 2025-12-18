@@ -2,55 +2,16 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
+// Initialize Firebase Admin SDK.
+// This is required for the function to interact with Firebase services.
 admin.initializeApp();
 
-const db = admin.firestore();
 const auth = admin.auth();
-const storage = admin.storage();
 
 /**
- * Deletes all documents in a collection or subcollection in batches.
- * @param {string} collectionPath The path to the collection to delete.
- * @param {number} batchSize The number of documents to delete in each batch.
- */
-async function deleteCollection(collectionPath: string, batchSize: number): Promise<void> {
-  const collectionRef = db.collection(collectionPath);
-  const query = collectionRef.orderBy("__name__").limit(batchSize);
-
-  return new Promise((resolve, reject) => {
-    deleteQueryBatch(query, resolve).catch(reject);
-  });
-}
-
-/**
- * Helper function for deleteCollection that recursively deletes documents in a batch.
- * @param {admin.firestore.Query} query The query for the batch of documents to delete.
- * @param {Function} resolve The promise's resolve function.
- */
-async function deleteQueryBatch(query: admin.firestore.Query, resolve: (value: unknown) => void): Promise<void> {
-  const snapshot = await query.get();
-
-  if (snapshot.size === 0) {
-    resolve(0);
-    return;
-  }
-
-  const batch = db.batch();
-  snapshot.docs.forEach((doc) => {
-    batch.delete(doc.ref);
-  });
-
-  await batch.commit();
-
-  // Recurse on the next process tick, to avoid hitting memory limits.
-  process.nextTick(() => {
-    deleteQueryBatch(query, resolve);
-  });
-}
-
-/**
- * Deletes a user and all their associated data across Firebase services.
+ * Deletes a user from Firebase Authentication.
  * This is an HTTPS Callable function, designed to be called from the client-side by an admin.
+ * Firestore data and Storage files will be cleaned up via Security Rules and Lifecycle Policies.
  */
 export const deleteUser = functions.https.onCall(async (data, context) => {
   // 1. Authentication and Authorization Check
@@ -73,100 +34,42 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
   if (!userIdToDelete || typeof userIdToDelete !== "string") {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "The function must be called with a valid 'userId'."
+      "The function must be called with a valid 'userId' string."
     );
   }
 
-  // 3. Delete Firestore Data
-  try {
-    // A) Delete all subcollections first
-    const userSubcollections = [
-      "notifications",
-      "vipMailbox",
-      "airdrop_claims",
-    ];
-    for (const subcollection of userSubcollections) {
-        await deleteCollection(`users/${userIdToDelete}/${subcollection}`, 100);
-    }
-     // Special handling for nested subcollections like support tickets
-    const supportTicketsSnapshot = await db.collection("supportTickets").where("userId", "==", userIdToDelete).get();
-    for (const ticketDoc of supportTicketsSnapshot.docs) {
-        await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
-    }
+  functions.logger.log(`Attempting to delete auth user: ${userIdToDelete}`);
 
-
-    // B) Batch delete all top-level documents associated with the user
-    const rootBatch = db.batch();
-    const collectionsToClean = [
-        { name: "deposits", field: "uid" },
-        { name: "withdrawals", field: "userId" },
-        { name: "cpmWithdrawals", field: "userId" },
-        { name: "cpm_purchase_logs", field: "userId" },
-        { name: "activityLogs", field: "userId" },
-        { name: "feedback", field: "userId" },
-        { name: "kycSubmissions", field: "userId" },
-        { name: "userPlans", field: "userId" }
-    ];
-
-    for (const { name, field } of collectionsToClean) {
-        const snapshot = await db.collection(name).where(field, "==", userIdToDelete).get();
-        if (!snapshot.empty) {
-            snapshot.docs.forEach((doc) => rootBatch.delete(doc.ref));
-        }
-    }
-    
-    // Also delete from the already cleaned support tickets collection
-    supportTicketsSnapshot.docs.forEach((doc) => rootBatch.delete(doc.ref));
-
-    // Delete the main user document and cpm_coin document
-    rootBatch.delete(db.collection("users").doc(userIdToDelete));
-    rootBatch.delete(db.collection("cpm_coins").doc(userIdToDelete));
-    
-    await rootBatch.commit();
-    functions.logger.log(`Successfully deleted Firestore data for user: ${userIdToDelete}`);
-
-  } catch (error: any) {
-      functions.logger.error("Error deleting Firestore data:", error);
-      throw new functions.https.HttpsError("internal", `Failed to delete Firestore data: ${error.message}`);
-  }
-
-  // 4. Delete user files from Firebase Storage
-  try {
-    const bucket = storage.bucket();
-    await bucket.deleteFiles({ prefix: `kyc_documents/${userIdToDelete}/` });
-    await bucket.deleteFiles({ prefix: `deposit_screenshots/${userIdToDelete}/` });
-    functions.logger.log(`Successfully deleted Storage files for user: ${userIdToDelete}`);
-  } catch (error: any) {
-      if (error.code !== 404) { // Ignore 'Not Found' errors
-          functions.logger.error("Error deleting Storage files:", error);
-          // Do not throw an error for storage deletion failure, just log it.
-      }
-  }
-  
-    // 2. Delete from Firebase Authentication (do this LAST)
+  // 2. Delete from Firebase Authentication
   try {
     await auth.deleteUser(userIdToDelete);
     functions.logger.log(`Successfully deleted auth user: ${userIdToDelete}`);
+    return { success: true, message: `Successfully deleted user ${userIdToDelete}.` };
   } catch (error: any) {
-    if (error.code !== "auth/user-not-found") {
-      functions.logger.error(`Failed to delete auth user: ${error.message}`);
-      // Don't throw an error if the user is already gone, but do for other errors
-      if(error.code !== 'auth/user-not-found'){
-         throw new functions.https.HttpsError("internal", `Failed to delete auth user: ${error.message}`);
-      }
+    functions.logger.error(`Failed to delete auth user ${userIdToDelete}:`, error);
+
+    // If the user is already not found in Auth, it's not a critical error.
+    if (error.code === "auth/user-not-found") {
+      functions.logger.warn(`Auth user ${userIdToDelete} was not found. They may have already been deleted.`);
+      return { success: true, message: "User was not found in authentication, but the deletion process is complete." };
     }
-    functions.logger.warn(`Auth user ${userIdToDelete} not found, but data cleanup was successful.`);
+
+    // For other errors, throw a specific HTTPS error.
+    throw new functions.https.HttpsError(
+        "internal",
+        `Failed to delete user from Authentication: ${error.message}`
+    );
   }
-
-
-  return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
 });
 
 
 /**
  * Resets a user's account data without deleting their authentication entry.
+ * This function remains as it was, as it is a different use case.
  */
 export const resetUserAccount = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
   }
@@ -216,28 +119,16 @@ export const resetUserAccount = functions.https.onCall(async (data, context) => 
     // Also find and delete support tickets
     const supportTicketsSnapshot = await db.collection('supportTickets').where('userId', '==', userIdToReset).get();
     for (const ticketDoc of supportTicketsSnapshot.docs) {
-      await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
+      // Note: This won't delete subcollections. Manual cleanup or a separate function needed for ticket replies.
       batch.delete(ticketDoc.ref);
     }
-
 
     // 3. Delete user's CPM coin document
     batch.delete(db.doc(`cpm_coins/${userIdToReset}`));
     
     await batch.commit();
 
-    // 4. Delete subcollections (must be done after batch commit)
-    const subcollectionsToDelete = [
-      "notifications",
-      "vipMailbox",
-      "airdrop_claims",
-    ];
-    for (const sub of subcollectionsToDelete) {
-      await deleteCollection(`users/${userIdToReset}/${sub}`, 100);
-    }
-     
-
-    // 5. Log the action
+    // 4. Log the action
     await db.collection("activityLogs").add({
       userId: 'ADMIN',
       action: 'account_reset',

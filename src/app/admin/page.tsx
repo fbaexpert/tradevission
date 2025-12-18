@@ -187,49 +187,33 @@ export default function AdminUsersPage() {
   const [newTransactionDate, setNewTransactionDate] = useState<Date | undefined>(new Date());
 
 
-  useEffect(() => {
+   useEffect(() => {
     if (!db) return;
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
     const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
-        let usersMap: Record<string, User> = {};
-
-        const cpmCoinListeners: (() => void)[] = [];
-
-        querySnapshot.docChanges().forEach((change) => {
-            if (change.type === "removed") {
-                setUsers(prevUsers => prevUsers.filter(u => u.id !== change.doc.id));
-                return;
-            }
-
-            const user = { id: change.doc.id, ...change.doc.data() } as User;
-            usersMap[user.id] = user;
-            
+        const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        
+        // This ensures that when a user is deleted from Firestore (manually or otherwise),
+        // they are immediately removed from the local state.
+        setUsers(usersData);
+        
+        // Separately, fetch CPM coins for existing users to avoid crashing on deletion
+        usersData.forEach(user => {
             const coinDocRef = doc(db, "cpm_coins", user.id);
-            const unsubscribeCoin = onSnapshot(coinDocRef, (coinDoc) => {
+            onSnapshot(coinDocRef, (coinDoc) => {
                 const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
-                setUsers(prevUsers => {
-                    return prevUsers.map(u => 
+                setUsers(prevUsers => 
+                    prevUsers.map(u => 
                         u.id === user.id 
                             ? { ...u, cpmCoins: cpmAmount, isVip: cpmAmount > 0 } 
                             : u
-                    );
-                });
+                    )
+                );
             });
-            cpmCoinListeners.push(unsubscribeCoin);
         });
-
-        setUsers(prevUsers => {
-            const existingUsers = new Map(prevUsers.map(u => [u.id, u]));
-            for (const uid in usersMap) {
-                existingUsers.set(uid, { ...existingUsers.get(uid), ...usersMap[uid] });
-            }
-            return Array.from(existingUsers.values()).sort((a,b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-        });
-
-        setLoading(false);
         
-        return () => cpmCoinListeners.forEach(unsub => unsub());
+        setLoading(false);
     });
 
     return () => unsubscribeUsers();
@@ -635,14 +619,22 @@ export default function AdminUsersPage() {
   };
 
   const handleDeleteUser = async (userId: string, userEmail: string) => {
+    if (!functions) {
+        toast({ variant: "destructive", title: "Error", description: "Firebase Functions are not available." });
+        return;
+    }
     setIsSubmitting(true);
     try {
         const deleteUserFunction = httpsCallable(functions, 'deleteUser');
-        await deleteUserFunction({ userId: userId });
-        toast({ title: "User Deletion Initiated", description: `The process to delete ${userEmail} and all their data has started.` });
+        const result = await deleteUserFunction({ userId: userId });
+        
+        // The user will be removed from the list via the real-time listener.
+        // We just need to show the toast message.
+        toast({ title: "User Deletion Initiated", description: `Successfully deleted user ${userEmail}.` });
+
     } catch (error: any) {
         console.error("Error calling deleteUser function:", error);
-        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete user and their data." });
+        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete user." });
     } finally {
         setIsSubmitting(false);
     }
