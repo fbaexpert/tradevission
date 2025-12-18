@@ -330,7 +330,7 @@ export default function PlansPage() {
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <div className="container mx-auto max-w-5xl">
-        <Card className="border-border/20 shadow-lg shadow-primary/5 mb-6 bg-cream-soft-white/10">
+        <Card className="border-border/20 shadow-lg shadow-primary/5 mb-6 bg-transparent">
           <CardHeader className="text-center">
               <Rocket className="h-10 w-10 text-accent mx-auto" />
             <CardTitle className="text-3xl text-white font-bold font-headline">
@@ -361,20 +361,13 @@ export default function PlansPage() {
             
             const discountPercentage = (isOfferActive && offer) ? offer.discountPercentage : 0;
             const discountedPrice = plan.price * (1 - (discountPercentage / 100));
+            const cardGlowColor = isOfferActive ? 'hsl(142 71% 45%)' : isOfferUpcoming ? 'hsl(187 71% 45%)' : tag?.color ?? 'hsl(var(--accent))';
+
 
             return (
                 <div key={plan.id} className="plan-card-container group">
-                    <div className={cn(
-                        "plan-card-glow",
-                        isOfferActive ? "bg-green-500/50" 
-                        : isOfferUpcoming ? "bg-cyan-500/50"
-                        : (tag?.color ? `bg-[${tag.color}]/50` : "bg-accent/30")
-                    )} style={tag?.color && !isOfferActive && !isOfferUpcoming ? {backgroundColor: `${tag.color}80`} : {}}/>
-                    <Card className={cn(
-                        "plan-card",
-                        (isOfferUpcoming) && "border-cyan-500/50",
-                        (isOfferActive) && "border-green-500/50"
-                    )}>
+                    <div className="plan-card-glow" style={{'--glow-color': cardGlowColor} as React.CSSProperties}/>
+                    <Card className="plan-card">
                     
                     {isOfferUpcoming && offer?.startTime && (
                          <div className="absolute top-4 inset-x-4 z-20 flex justify-center">
@@ -490,8 +483,7 @@ export default function PlansPage() {
         }
         .plan-card-container:hover .plan-card {
             transform: translateY(-5px);
-            box-shadow: 0 10px 20px -5px hsl(var(--primary) / 0.1);
-            border-color: hsl(var(--primary) / 0.5);
+            border-color: var(--glow-color);
         }
         .plan-card-glow {
             position: absolute;
@@ -504,9 +496,10 @@ export default function PlansPage() {
             transition: opacity 0.4s ease;
             filter: blur(25px);
             z-index: 0;
+            background-color: var(--glow-color);
         }
         .plan-card-container:hover .plan-card-glow {
-            opacity: 0.5;
+            opacity: 0.25;
         }
        `}</style>
     </div>
