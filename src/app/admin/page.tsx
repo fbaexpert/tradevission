@@ -22,6 +22,7 @@ import {
   setDoc,
   Query,
   DocumentReference,
+  addDoc,
 } from "firebase/firestore";
 import {
   Card,
@@ -192,7 +193,6 @@ export default function AdminUsersPage() {
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
     const unsubscribeUsers = onSnapshot(q, async (querySnapshot) => {
-      const usersData: User[] = [];
       const userPromises = querySnapshot.docs.map(async (userDoc) => {
         if (!userDoc.exists()) return null;
 
@@ -204,7 +204,7 @@ export default function AdminUsersPage() {
           user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
           user.isVip = user.cpmCoins > 0;
         } catch (error) {
-          console.error(`Failed to fetch CPM coins for user ${user.id}:`, error);
+          console.warn(`Could not fetch CPM coins for deleted or invalid user ${user.id}:`, error);
           user.cpmCoins = 0;
           user.isVip = false;
         }
@@ -676,18 +676,21 @@ export default function AdminUsersPage() {
   }
 
   const handleDeleteUser = async (userId: string, userEmail: string) => {
+    if (!db) return;
     setIsSubmitting(true);
-    const deleteUserFn = httpsCallable(functions, 'deleteUser');
     try {
-      const result = await deleteUserFn({ userId });
-      if ((result.data as any).success) {
-        toast({
-          title: "User Deleted",
-          description: `User ${userEmail} has been permanently deleted.`,
-        });
-      } else {
-        throw new Error((result.data as any).message || 'Failed to delete user.');
-      }
+      await addDoc(collection(db, "actions"), {
+        action: "deleteUser",
+        userId: userId,
+        status: "pending",
+        triggeredBy: "admin",
+        createdAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "Deletion Queued",
+        description: `The deletion process for user ${userEmail} has started.`,
+      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -856,7 +859,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete the user account for <span className="font-bold text-white">{user.email}</span> and all of their associated data.
+                                        This action will permanently delete the user <span className="font-bold text-white">{user.email}</span> and all their data. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -1379,3 +1382,5 @@ export default function AdminUsersPage() {
     </>
   );
 }
+
+    
