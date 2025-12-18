@@ -12,8 +12,9 @@ const db = admin.firestore();
 
 /**
  * Handles admin-initiated tasks like deleting a user.
+ * This new version is more robust with better error handling.
  */
-export const handleAdminAction = functions.runWith({timeoutSeconds: 60, memory: '256MB'}).firestore
+export const handleAdminAction = functions.runWith({timeoutSeconds: 120, memory: '256MB'}).firestore
   .document('actions/{actionId}')
   .onCreate(async (snap) => {
     const action = snap.data();
@@ -22,45 +23,50 @@ export const handleAdminAction = functions.runWith({timeoutSeconds: 60, memory: 
       const { userId } = action;
 
       if (!userId) {
-        functions.logger.error('Action "deleteUser" is missing userId.');
+        functions.logger.error('Action "deleteUser" is missing userId.', { actionId: snap.id });
         await snap.ref.update({ status: 'error', error: 'Missing userId.' });
         return;
       }
 
+      functions.logger.log(`Starting deletion for user: ${userId}`, { actionId: snap.id });
+
+      // Step 1: Delete user from Firebase Authentication
       try {
-        functions.logger.log(`Starting deletion for user: ${userId}`);
-
-        // Step 1: Delete user from Firebase Authentication
         await auth.deleteUser(userId);
-        functions.logger.log(`Successfully deleted auth user: ${userId}`);
+        functions.logger.log(`Successfully deleted auth user: ${userId}`, { actionId: snap.id });
+      } catch (error: any) {
+        // If the user is already deleted from Auth, it's not a critical failure.
+        // We can proceed to delete their Firestore data.
+        if (error.code === 'auth/user-not-found') {
+          functions.logger.warn(`Auth user ${userId} not found, proceeding with DB cleanup.`, { actionId: snap.id });
+        } else {
+          // For other auth errors, log it and stop.
+          functions.logger.error(`Error deleting auth user ${userId}:`, error, { actionId: snap.id });
+          await snap.ref.update({ status: 'error', error: `Auth deletion failed: ${error.message}` });
+          return;
+        }
+      }
 
+      // Step 2: Delete Firestore documents in a batch
+      try {
         const batch = db.batch();
 
-        // Step 2: Delete main user document from Firestore
         const userDocRef = db.collection('users').doc(userId);
-        batch.delete(userDocRef);
-
-        // Step 3 (Optional but good practice): Delete associated CPM coin document
         const cpmCoinDocRef = db.collection('cpm_coins').doc(userId);
+
+        batch.delete(userDocRef);
         batch.delete(cpmCoinDocRef);
 
         await batch.commit();
-        functions.logger.log(`Deleted Firestore documents for: ${userId}`);
-        
-        // Final Step: Update the action status to 'completed'
-        await snap.ref.update({ status: 'completed' });
-        functions.logger.log(`Action deleteUser for ${userId} completed successfully.`);
-
+        functions.logger.log(`Deleted main Firestore documents for: ${userId}`, { actionId: snap.id });
       } catch (error: any) {
-        functions.logger.error(`Error processing deleteUser action for ${userId}:`, error);
-        
-        // If auth user is already gone, it's a partial success, we can still consider it completed.
-        if (error.code === 'auth/user-not-found') {
-           await snap.ref.update({ status: 'completed', details: 'Auth user already deleted, DB cleanup finished.' });
-           return;
-        }
-
-        await snap.ref.update({ status: 'error', error: error.message });
+        functions.logger.error(`Error deleting Firestore data for ${userId}:`, error, { actionId: snap.id });
+        await snap.ref.update({ status: 'error', error: `Firestore cleanup failed: ${error.message}` });
+        return;
       }
+        
+      // Final Step: Mark the action as completed
+      await snap.ref.update({ status: 'completed' });
+      functions.logger.log(`Action deleteUser for ${userId} completed successfully.`, { actionId: snap.id });
     }
   });
