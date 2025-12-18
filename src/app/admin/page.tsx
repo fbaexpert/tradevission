@@ -20,6 +20,7 @@ import {
   where,
   setDoc,
   addDoc,
+  runTransaction
 } from "firebase/firestore";
 import {
   Card,
@@ -79,6 +80,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { nanoid } from "nanoid";
+import { httpsCallable } from "firebase/functions";
 
 interface CustomBadge {
     id: string;
@@ -149,7 +151,7 @@ const typeColors: { [key: string]: string } = {
 
 
 export default function AdminUsersPage() {
-  const { db } = useFirebase();
+  const { db, functions } = useFirebase();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -191,24 +193,20 @@ export default function AdminUsersPage() {
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
     const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
-        const usersPromises = querySnapshot.docs.map(async userDoc => {
-            if (!userDoc.exists()) return null;
-
+        const usersDataPromises = querySnapshot.docs.map(async userDoc => {
             const user = { id: userDoc.id, ...userDoc.data() } as User;
-            
             try {
                 const coinDocRef = doc(db, "cpm_coins", user.id);
                 const coinDoc = await getDoc(coinDocRef);
                 user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
             } catch (error) {
-                console.warn(`Could not fetch CPM coins for user ${user.id}:`, error);
                 user.cpmCoins = 0;
             }
             return user;
         });
 
-        Promise.all(usersPromises).then(usersData => {
-            setUsers(usersData.filter(u => u !== null) as User[]);
+        Promise.all(usersDataPromises).then(usersData => {
+            setUsers(usersData);
             setLoading(false);
         });
 
@@ -673,33 +671,22 @@ export default function AdminUsersPage() {
   }
 
   const handleDeleteUser = async (user: User) => {
-    if (!db) return;
-    
-    // Instant UI update for a fast feel
-    setUsers(currentUsers => currentUsers.filter(u => u.id !== user.id));
+    if (!functions) return;
     setIsSubmitting(true);
-
+    
+    const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
     try {
-      // Trigger the backend function by creating an action document
-      await addDoc(collection(db, "actions"), {
-        action: "deleteUser",
-        userId: user.id,
-        status: "pending",
-        triggeredBy: "admin",
-        createdAt: serverTimestamp(),
-      });
-
+      await deleteUserAccount({ uid: user.id });
       toast({
-        title: "Deletion in Progress",
-        description: `The deletion process for user ${user.email} has started in the background.`,
+        title: "User Deleted",
+        description: `User ${user.email} has been permanently deleted.`,
       });
     } catch (error: any) {
-      // If queuing fails, revert the UI change and show an error
-      setUsers(users); 
+      console.error("Deletion failed:", error);
       toast({
         variant: "destructive",
-        title: "Deletion Failed to Start",
-        description: error.message || "Could not queue the user for deletion.",
+        title: "Deletion Failed",
+        description: error.message || "An unexpected error occurred.",
       });
     } finally {
       setIsSubmitting(false);
@@ -868,11 +855,11 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This will queue the user <span className="font-bold text-white">{user.email}</span> for permanent deletion. This action is irreversible.
+                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         disabled={isSubmitting}
                                         onClick={() => handleDeleteUser(user)}
