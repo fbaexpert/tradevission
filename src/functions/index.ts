@@ -1,3 +1,4 @@
+
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
@@ -114,6 +115,7 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
         { name: "feedback", field: "userId" },
         { name: "kycSubmissions", field: "userId" },
         { name: "supportTickets", field: "userId" },
+        { name: "userPlans", field: "userId" }
     ];
     
     const rootBatch = db.batch();
@@ -151,9 +153,98 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
   } catch (error: any) {
       if (error.code !== 404) { // Ignore 'Not Found' errors
           functions.logger.error("Error deleting Storage files:", error);
-          throw new functions.https.HttpsError("internal", `Failed to delete Storage files: ${error.message}`);
+          // Do not throw an error for storage deletion failure, just log it.
       }
   }
 
   return { success: true, message: `Successfully deleted user ${userIdToDelete} and all their data.` };
+});
+
+
+/**
+ * Resets a user's account data without deleting their authentication entry.
+ */
+export const resetUserAccount = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+  }
+  const ADMIN_EMAIL = "ummarfarooq38990@gmail.com";
+  if (context.auth.token.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    throw new functions.https.HttpsError("permission-denied", "You must be an admin.");
+  }
+  const userIdToReset = data.userId;
+  if (!userIdToReset) {
+    throw new functions.https.HttpsError("invalid-argument", "Missing 'userId'.");
+  }
+
+  try {
+    const batch = db.batch();
+    const userRef = db.doc(`users/${userIdToReset}`);
+
+    // 1. Reset main user document fields
+    batch.update(userRef, {
+      balance0: 0,
+      totalWithdrawn: 0,
+      totalReferralBonus: 0,
+      totalTeamBonus: 0,
+      totalTeamDeposit: 0,
+      depositDone: false,
+      isCommander: false,
+      isVip: false,
+      awardedSuperBonuses: [],
+      customBadges: [],
+    });
+
+    // 2. Delete related top-level documents
+    const collectionsToClean = [
+        { name: "deposits", field: "uid" },
+        { name: "withdrawals", field: "userId" },
+        { name: "cpmWithdrawals", field: "userId" },
+        { name: "cpm_purchase_logs", field: "userId" },
+        { name: "activityLogs", field: "userId" },
+        { name: "feedback", field: "userId" },
+        { name: "kycSubmissions", field: "userId" },
+        { name: "supportTickets", field: "userId" },
+        { name: "userPlans", field: "userId" },
+    ];
+    for (const { name, field } of collectionsToClean) {
+        const snapshot = await db.collection(name).where(field, "==", userIdToReset).get();
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    }
+
+    // 3. Delete user's CPM coin document
+    batch.delete(db.doc(`cpm_coins/${userIdToReset}`));
+    
+    await batch.commit();
+
+    // 4. Delete subcollections (must be done after batch commit)
+    const subcollectionsToDelete = [
+      "notifications",
+      "vipMailbox",
+      "airdrop_claims",
+    ];
+    for (const sub of subcollectionsToDelete) {
+      await deleteCollection(`users/${userIdToReset}/${sub}`, 100);
+    }
+     const supportTicketsSnapshot = await db.collection('supportTickets').where('userId', '==', userIdToReset).get();
+      for (const ticketDoc of supportTicketsSnapshot.docs) {
+        await deleteCollection(`supportTickets/${ticketDoc.id}/replies`, 100);
+      }
+
+    // 5. Log the action
+    await db.collection("activityLogs").add({
+      userId: 'ADMIN',
+      action: 'account_reset',
+      details: `Admin reset account for user ${userIdToReset}.`,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      relatedId: userIdToReset
+    });
+
+    functions.logger.log(`Successfully reset data for user: ${userIdToReset}`);
+    return { success: true, message: "User account has been reset." };
+
+  } catch (error: any) {
+    functions.logger.error("Error resetting user account:", error);
+    throw new functions.https.HttpsError("internal", `Failed to reset user: ${error.message}`);
+  }
 });

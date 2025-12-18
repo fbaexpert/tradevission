@@ -649,64 +649,11 @@ export default function AdminUsersPage() {
   };
 
   const handleResetUserAccount = async (userToReset: User) => {
-    if (!db) return;
+    if (!db || !functions) return;
     setIsSubmitting(true);
     try {
-        const batch = writeBatch(db);
-        
-        // 1. Reset user document fields
-        const userDocRef = doc(db, "users", userToReset.id);
-        batch.update(userDocRef, {
-            balance0: 0,
-            totalWithdrawn: 0,
-            totalReferralBonus: 0,
-            totalTeamBonus: 0,
-            totalTeamDeposit: 0,
-            depositDone: false,
-            isCommander: false,
-            isVip: false, // Assuming VIP is tied to CPM coins, which are deleted
-            awardedSuperBonuses: [],
-            customBadges: [],
-        });
-
-        // 2. Delete related documents and subcollections
-        const collectionsToDelete = ["notifications", "userPlans", "supportTickets", "vipMailbox"];
-        for (const subCollection of collectionsToDelete) {
-            const snapshot = await getDocs(collection(userDocRef, subCollection));
-            snapshot.forEach(subDoc => batch.delete(subDoc.ref));
-        }
-
-        const relatedDataQueries: (Query | DocumentReference)[] = [
-            query(collection(db, "deposits"), where("uid", "==", userToReset.id)),
-            query(collection(db, "withdrawals"), where("userId", "==", userToReset.id)),
-            query(collection(db, "cpmWithdrawals"), where("userId", "==", userToReset.id)),
-            query(collection(db, "activityLogs"), where("userId", "==", userToReset.id)),
-            doc(db, "cpm_coins", userToReset.id),
-            query(collection(db, "cpm_purchase_logs"), where("userId", "==", userToReset.id)),
-            query(collection(db, "feedback"), where("userId", "==", userToReset.id)),
-            query(collection(db, "userPlans"), where("userId", "==", userToReset.id)),
-        ];
-
-        for (const q of relatedDataQueries) {
-             if ("type" in q && q.type === 'query') {
-                const snapshot = await getDocs(q as Query);
-                snapshot.forEach(subDoc => batch.delete(subDoc.ref));
-            } else if ("type" in q && q.type === 'document') {
-                batch.delete(q as DocumentReference);
-            }
-        }
-        
-        // 3. Log the admin action
-        const activityLogRef = doc(collection(db, "activityLogs"));
-        batch.set(activityLogRef, {
-            userId: 'ADMIN',
-            action: 'account_reset',
-            details: `Admin reset account for user ${userToReset.email}.`,
-            timestamp: serverTimestamp(),
-            relatedId: userToReset.id
-        });
-
-        await batch.commit();
+        const resetUserFunction = httpsCallable(functions, 'resetUserAccount');
+        await resetUserFunction({ userId: userToReset.id });
         toast({ title: "Account Reset", description: `All data for ${userToReset.email} has been reset.` });
     } catch (error: any) {
         console.error("Error during account reset:", error);
