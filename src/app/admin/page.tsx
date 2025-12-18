@@ -190,32 +190,46 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!db) return;
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-    const unsubscribeUsers = onSnapshot(q, async (querySnapshot) => {
-      const usersData: User[] = [];
-      const coinPromises = querySnapshot.docs.map(userDoc => {
-        const coinDocRef = doc(db, "cpm_coins", userDoc.id);
-        return getDoc(coinDocRef);
-      });
+    
+    const unsubscribeUsers = onSnapshot(q, (querySnapshot) => {
+        let usersMap: Record<string, User> = {};
 
-      const coinSnapshots = await Promise.all(coinPromises);
+        const cpmCoinListeners: (() => void)[] = [];
 
-      querySnapshot.docs.forEach((userDoc, index) => {
-        const user = { id: userDoc.id, ...userDoc.data() } as User;
-        const coinDoc = coinSnapshots[index];
+        querySnapshot.docChanges().forEach((change) => {
+            if (change.type === "removed") {
+                setUsers(prevUsers => prevUsers.filter(u => u.id !== change.doc.id));
+                return;
+            }
+
+            const user = { id: change.doc.id, ...change.doc.data() } as User;
+            usersMap[user.id] = user;
+            
+            const coinDocRef = doc(db, "cpm_coins", user.id);
+            const unsubscribeCoin = onSnapshot(coinDocRef, (coinDoc) => {
+                const cpmAmount = coinDoc.exists() ? coinDoc.data().amount : 0;
+                setUsers(prevUsers => {
+                    return prevUsers.map(u => 
+                        u.id === user.id 
+                            ? { ...u, cpmCoins: cpmAmount, isVip: cpmAmount > 0 } 
+                            : u
+                    );
+                });
+            });
+            cpmCoinListeners.push(unsubscribeCoin);
+        });
+
+        setUsers(prevUsers => {
+            const existingUsers = new Map(prevUsers.map(u => [u.id, u]));
+            for (const uid in usersMap) {
+                existingUsers.set(uid, { ...existingUsers.get(uid), ...usersMap[uid] });
+            }
+            return Array.from(existingUsers.values()).sort((a,b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+        });
+
+        setLoading(false);
         
-        if (coinDoc.exists() && coinDoc.data().amount > 0) {
-            user.cpmCoins = coinDoc.data().amount;
-            user.isVip = true;
-        } else {
-            user.cpmCoins = 0;
-            user.isVip = false;
-        }
-        
-        usersData.push(user);
-      });
-
-      setUsers(usersData);
-      setLoading(false);
+        return () => cpmCoinListeners.forEach(unsub => unsub());
     });
 
     return () => unsubscribeUsers();
