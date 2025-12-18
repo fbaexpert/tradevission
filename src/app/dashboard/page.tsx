@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
-import { doc, collection, query, where, Timestamp, onSnapshot, orderBy } from "firebase/firestore";
+import { doc, collection, query, where, Timestamp, onSnapshot, orderBy, deleteDoc, writeBatch } from "firebase/firestore";
 import Link from "next/link";
 import Loader from "@/components/shared/loader";
 import { User, Mail, Calendar, AlertCircle, DollarSign, Tv, ArrowUpFromDot, Zap, CalendarDays, Rocket, Copy, Users2, ShieldCheck, Coins, Clock, Briefcase, UsersRound, Star, Trophy } from "lucide-react";
@@ -16,6 +16,17 @@ import {
   CardTitle,
   CardFooter
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,6 +36,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { VipTier } from "@/app/admin/vip-tiers/page";
+import { httpsCallable } from "firebase/functions";
 
 
 // --- Data Interfaces ---
@@ -192,81 +204,86 @@ const VipProgressCard = ({ tiers, totalDeposit }: { tiers: VipTier[], totalDepos
         const sortedTiers = tiers.sort((a, b) => a.minDeposit - b.minDeposit);
         let current: VipTier | null = null;
         let next: VipTier | null = null;
+        let currentRank = "Member";
 
-        for (let i = sortedTiers.length - 1; i >= 0; i--) {
+        for (let i = 0; i < sortedTiers.length; i++) {
             if (totalDeposit >= sortedTiers[i].minDeposit) {
                 current = sortedTiers[i];
-                if (i + 1 < sortedTiers.length) {
-                    next = sortedTiers[i+1];
+                currentRank = sortedTiers[i].name;
+            } else {
+                if (!next) {
+                    next = sortedTiers[i];
                 }
-                break;
             }
         }
         
-        if (!current && sortedTiers.length > 0) {
-            next = sortedTiers[0];
-        }
-
         let progress = 0;
-        if (current && next) {
-            const range = next.minDeposit - current.minDeposit;
-            const progressInRange = totalDeposit - current.minDeposit;
-            progress = (progressInRange / range) * 100;
-        } else if (!current && next) { // Progress towards the first tier
-            progress = (totalDeposit / next.minDeposit) * 100;
-        } else if (current && !next) { // Max tier reached
-            progress = 100;
+        const startOfRange = current?.minDeposit ?? 0;
+        const endOfRange = next?.minDeposit ?? (current ? current.minDeposit * 2 : 100);
+
+        if (endOfRange > startOfRange) {
+            progress = ((totalDeposit - startOfRange) / (endOfRange - startOfRange)) * 100;
+        } else if (totalDeposit >= startOfRange) {
+            progress = 100; // Max tier
         }
         
         return {
             currentTier: current,
             nextTier: next,
-            progressPercentage: Math.min(100, progress),
-            rank: current ? `VIP ${current.rank}` : "Member"
+            progressPercentage: Math.min(100, Math.max(0, progress)),
+            rank: currentRank
         };
     }, [tiers, totalDeposit]);
     
+    const glowColor = currentTier?.badgeColor || '#4f46e5';
+
     return (
-        <Card className="border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20">
-            <CardHeader className="flex-row items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <Trophy className="h-6 w-6 text-yellow-400" />
-                    <CardTitle className="text-white font-bold">VIP Progress</CardTitle>
-                </div>
-                 {currentTier ? (
-                    <Badge style={{ backgroundColor: currentTier.badgeColor }} className="text-white shadow-lg">{currentTier.name}</Badge>
-                ) : (
-                    <Badge variant="outline">Member</Badge>
-                )}
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-3">
+        <div className="relative group">
+            <div 
+                className="absolute -inset-0.5 rounded-xl blur-md opacity-40 group-hover:opacity-70 transition duration-1000 animate-tilt"
+                style={{ background: `linear-gradient(135deg, ${glowColor}, hsl(var(--primary)))` }}
+            ></div>
+            <Card 
+                className="relative border-border/20 shadow-lg"
+                style={{ '--glow-color': glowColor } as React.CSSProperties}
+            >
+                <CardHeader className="flex-row items-center justify-between pb-2">
+                    <div className="flex items-center gap-3">
+                        <Trophy className="h-6 w-6 text-yellow-400" />
+                        <CardTitle className="text-white font-bold">VIP Status</CardTitle>
+                    </div>
+                    <Badge style={{ backgroundColor: currentTier?.badgeColor || 'hsl(var(--muted))' }} className="text-white shadow-lg">{rank}</Badge>
+                </CardHeader>
+                <CardContent className="space-y-4">
                     <div>
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                            <span>Total Deposits: ${totalDeposit.toFixed(2)}</span>
-                            {nextTier && <span>Next: ${nextTier.minDeposit} for {nextTier.name}</span>}
+                            <span>${totalDeposit.toFixed(2)}</span>
+                            {nextTier ? <span>Next: ${nextTier.minDeposit}</span> : <span>Max Level</span>}
                         </div>
                         <Progress value={progressPercentage} className="h-2"/>
                     </div>
                      {nextTier ? (
-                        <p className="text-center text-sm text-muted-foreground">
-                            Deposit ${Math.max(0, nextTier.minDeposit - totalDeposit).toFixed(2)} more to reach the next level.
-                        </p>
-                    ) : currentTier ? (
-                        <p className="text-center text-sm font-bold text-green-400">You have reached the highest VIP level!</p>
+                        <div className="text-center space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                Deposit <span className="font-bold text-primary">${Math.max(0, nextTier.minDeposit - totalDeposit).toFixed(2)}</span> more to reach <span className="font-bold text-white">{nextTier.name}</span> and earn a <span className="font-bold text-primary">{nextTier.bonusPercentage}%</span> deposit bonus!
+                            </p>
+                            <Button asChild size="sm">
+                                <Link href="/dashboard/deposit">Deposit Now</Link>
+                            </Button>
+                        </div>
                     ) : (
-                         <p className="text-center text-sm text-muted-foreground">Make a deposit to start your VIP journey.</p>
+                        <p className="text-center text-sm font-bold text-green-400">You have reached the highest VIP level!</p>
                     )}
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+        </div>
     )
 }
 
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
-  const { db, loading: firebaseLoading } = useFirebase();
+  const { db, functions, loading: firebaseLoading } = useFirebase();
   const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [userPlans, setUserPlans] = useState<UserPlan[]>([]);
@@ -275,6 +292,7 @@ export default function Dashboard() {
   const [vipTiers, setVipTiers] = useState<VipTier[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
 
   useEffect(() => {
@@ -292,6 +310,10 @@ export default function Dashboard() {
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
         if(doc.exists()) {
             setUserData({ uid: doc.id, ...doc.data() } as UserData);
+        } else {
+          // This case handles when an admin deletes the user.
+          // The auth listener in AuthProvider will eventually log the user out.
+          setUserData(null);
         }
     }, (err) => {
         console.error("Error with real-time user data:", err);
@@ -313,7 +335,7 @@ export default function Dashboard() {
         setCpmCoinData(doc.exists() ? doc.data() as CpmCoinData : null);
     });
 
-    const vipTiersQuery = query(collection(db, "vipTiers"), orderBy("minDeposit", "asc"));
+    const vipTiersQuery = query(collection(db, "vipTiers"), where("isEnabled", "==", true), orderBy("minDeposit", "asc"));
     const unsubscribeVipTiers = onSnapshot(vipTiersQuery, (snapshot) => {
         const tiers = snapshot.docs.map((doc, index) => ({ id: doc.id, rank: index + 1, ...doc.data()} as VipTier));
         setVipTiers(tiers);
@@ -362,14 +384,33 @@ export default function Dashboard() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   }
 
-  const isLoading = authLoading || dataLoading || !userData;
+  const handleDeleteUser = async () => {
+    if (!user || !functions) return;
+    setIsDeleting(true);
 
-  if (isLoading || !user) {
+    try {
+        const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+        const result = await deleteUserAccount({ uid: user.uid });
+        toast({
+            title: "Account Deletion Successful",
+            description: "Your account and all associated data are being removed.",
+        });
+        // The auth state listener will handle logout and redirection.
+    } catch (error: any) {
+        console.error("Error deleting account:", error);
+        toast({
+            variant: "destructive",
+            title: "Deletion Failed",
+            description: error.message || "Could not delete your account at this time. Please contact support.",
+        });
+        setIsDeleting(false);
+    }
+  };
+
+  const isLoading = authLoading || dataLoading;
+
+  if (isLoading || !user || !userData) {
     return <Loader />;
-  }
-  
-  if (!userData) {
-      return <Loader />
   }
 
   const createdAtDate = userData.createdAt ? new Date(userData.createdAt.seconds * 1000).toLocaleDateString() : "N/A";
@@ -555,3 +596,5 @@ export default function Dashboard() {
     </>
   );
 }
+
+    
