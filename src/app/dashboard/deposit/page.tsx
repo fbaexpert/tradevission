@@ -145,14 +145,14 @@ export default function DepositPage() {
     setLoading(true);
     setError(null);
 
-    // Get a local copy of the file to use after the initial submission
-    const fileToUpload = screenshotFile;
-
     try {
-        const depositRef = doc(collection(db, "deposits"));
-        const depositId = depositRef.id;
+        const depositId = doc(collection(db, "deposits")).id;
+        const storageRef = ref(storage, `deposit_screenshots/${user.uid}/${depositId}`);
+        const snapshot = await uploadBytes(storageRef, screenshotFile);
+        const downloadURL = await getDownloadURL(snapshot.ref);
 
         const batch = writeBatch(db);
+        const depositRef = doc(db, "deposits", depositId);
         
         batch.set(depositRef, {
             uid: user.uid,
@@ -162,7 +162,7 @@ export default function DepositPage() {
             network: 'TRC20',
             walletOrIban: CRYPTO_WALLET_ADDRESS,
             tid: tid,
-            screenshotUrl: '', // Initially empty
+            screenshotUrl: downloadURL,
             status: "pending",
             createdAt: serverTimestamp(),
         });
@@ -189,30 +189,7 @@ export default function DepositPage() {
             description: "Your request is pending approval. You will be notified shortly.",
         });
 
-        // Clear the form and navigate away immediately for a faster user experience
-        setAmount("");
-        setTid("");
-        setScreenshotFile(null);
-        setLoading(false);
         router.push("/dashboard");
-
-        // Upload the screenshot in the background
-        const storageRef = ref(storage, `deposit_screenshots/${user.uid}/${depositId}`);
-        uploadBytes(storageRef, fileToUpload).then(snapshot => {
-            getDownloadURL(snapshot.ref).then(downloadURL => {
-                updateDoc(depositRef, { screenshotUrl: downloadURL });
-            });
-        }).catch(uploadError => {
-            console.error("Background screenshot upload failed:", uploadError);
-            // Optionally, log this failure to an admin-visible collection
-            const errorLogRef = doc(collection(db, "uploadErrors"));
-            setDoc(errorLogRef, {
-                userId: user.uid,
-                depositId: depositId,
-                error: uploadError.message,
-                timestamp: serverTimestamp()
-            });
-        });
 
     } catch (err: any) {
         setError(err.message || "Failed to submit deposit request.");
