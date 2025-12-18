@@ -22,6 +22,7 @@ import {
   Query,
   DocumentReference,
   addDoc,
+  arrayUnion
 } from "firebase/firestore";
 import {
   Card,
@@ -80,6 +81,7 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { nanoid } from "nanoid";
 
 interface CustomBadge {
     id: string;
@@ -192,28 +194,24 @@ export default function AdminUsersPage() {
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     
     const unsubscribeUsers = onSnapshot(q, async (querySnapshot) => {
-      const userPromises = querySnapshot.docs.map(async (userDoc) => {
-        if (!userDoc.exists()) return null;
+        const usersData: User[] = [];
+        for (const userDoc of querySnapshot.docs) {
+            if (!userDoc.exists()) continue;
 
-        const user = { id: userDoc.id, ...userDoc.data() } as User;
-        
-        try {
-          const coinDocRef = doc(db, "cpm_coins", user.id);
-          const coinDoc = await getDoc(coinDocRef);
-          user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
-          user.isVip = user.cpmCoins > 0;
-        } catch (error) {
-          // This can happen if a user is deleted but their data is still being processed
-          // It's safe to just set defaults here
-          user.cpmCoins = 0;
-          user.isVip = false;
+            const user = { id: userDoc.id, ...userDoc.data() } as User;
+            
+            try {
+                const coinDocRef = doc(db, "cpm_coins", user.id);
+                const coinDoc = await getDoc(coinDocRef);
+                user.cpmCoins = coinDoc.exists() ? coinDoc.data().amount : 0;
+            } catch (error) {
+                console.warn(`Could not fetch CPM coins for user ${user.id}:`, error);
+                user.cpmCoins = 0;
+            }
+            usersData.push(user);
         }
-        return user;
-      });
-
-      const resolvedUsers = (await Promise.all(userPromises)).filter(user => user !== null) as User[];
-      setUsers(resolvedUsers);
-      setLoading(false);
+        setUsers(usersData);
+        setLoading(false);
 
     }, (error) => {
         console.error("Error fetching users:", error);
@@ -783,11 +781,16 @@ export default function AdminUsersPage() {
                               <Star className="h-3 w-3 mr-1 text-black"/> Commander
                           </Badge>
                         }
-                        {user.isVip && !user.isCommander &&
+                        {user.cpmCoins && user.cpmCoins > 0 && !user.isCommander &&
                           <Badge className="bg-gradient-to-br from-purple-600 to-indigo-700 text-yellow-300 border-purple-400 text-xs shadow-lg shadow-purple-500/20">
                               <ShieldCheck className="h-3 w-3 mr-1 text-yellow-400"/> VIP
                           </Badge>
                         }
+                        {user.customBadges?.map(badge => (
+                          <Badge key={badge.id} style={{ backgroundColor: badge.color }} className="text-white">
+                              {badge.name}
+                          </Badge>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -866,7 +869,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This action will permanently delete the user <span className="font-bold text-white">{user.email}</span> and all their data. This action is irreversible.
+                                        This will queue the user <span className="font-bold text-white">{user.email}</span> for permanent deletion of all their data. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -1394,5 +1397,3 @@ export default function AdminUsersPage() {
     </>
   );
 }
-
-    

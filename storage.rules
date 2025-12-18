@@ -29,10 +29,11 @@ service firebase.storage {
        allow read: if request.auth != null && request.auth.token.isAdmin == true;
     }
 
-    // Allow backend functions (like our deleteUser function) to delete files.
-    // This rule allows any authenticated app server with a valid service account to perform deletions.
+    // Allow backend functions (service accounts) to perform any action on any file.
+    // This is crucial for the deleteUser function to be able to delete user files.
+    // Service accounts authenticate with a null `request.auth` object.
     match /{allPaths=**} {
-      allow delete: if request.auth == null; // Service accounts authenticate as null
+      allow read, write, delete: if request.auth == null;
     }
   }
 }
