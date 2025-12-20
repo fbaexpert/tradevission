@@ -145,12 +145,22 @@ export default function WithdrawPage() {
     
     // OTP Functions
     const handleSendOtp = async () => {
-        if (isSendingOtp) return;
+        if (isSendingOtp || !user) return;
         setIsSendingOtp(true);
         setError(null);
         try {
-            const sendOtpFunction = httpsCallable(functions, 'sendWithdrawalOtp');
-            await sendOtpFunction();
+            const response = await fetch('/api/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: user.uid }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to send OTP.');
+            }
+
             toast({ title: 'OTP Sent', description: 'A verification code has been sent to your email.' });
         } catch (err: any) {
             setError(err.message || 'Failed to send OTP.');
