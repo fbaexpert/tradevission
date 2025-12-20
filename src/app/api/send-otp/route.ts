@@ -1,54 +1,63 @@
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import { createTransport } from 'nodemailer';
 
-import { NextResponse } from 'next/server';
-import { getFirebase } from '@/lib/firebase/config';
-import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
-import nodemailer from 'nodemailer';
+// Initialize Firebase Admin SDK
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
-// This is required to load environment variables from .env.local
-require('dotenv').config();
+// Set Nodemailer config from Firebase environment variables
+const nodemailerConfig = functions.config().nodemailer;
+const transporter = createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+        user: nodemailerConfig?.user,
+        pass: nodemailerConfig?.pass,
+    },
+});
 
-export async function POST(request: Request) {
-    const { uid } = await request.json();
-
-    if (!uid) {
-        return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+/**
+ * A callable function that sends a 6-digit OTP to the user's email for withdrawal verification.
+ */
+export const sendWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    
+    // Check if email and password are configured
+    if (!nodemailerConfig?.user || !nodemailerConfig?.pass) {
+        functions.logger.error("Nodemailer is not configured. Run 'firebase functions:config:set nodemailer.user=\"EMAIL\" nodemailer.pass=\"PASSWORD\"'");
+        throw new functions.https.HttpsError('internal', 'The email service is not configured.');
     }
 
-    const { db } = getFirebase();
-    const userRef = doc(db, 'users', uid);
+    const uid = context.auth.uid;
+    const userRef = admin.firestore().collection('users').doc(uid);
 
     try {
-        const userDoc = await getDoc(userRef);
-        if (!userDoc.exists()) {
-            return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+        const userDoc = await userRef.get();
+        if (!userDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'User not found.');
         }
         
         const userData = userDoc.data();
-        if (!userData || !userData.email) {
-             return NextResponse.json({ error: 'User data or email is missing.' }, { status: 400 });
+        if (!userData?.email) {
+             throw new functions.https.HttpsError('not-found', 'User email is missing.');
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
-        await updateDoc(userRef, {
+        await userRef.update({
             'withdrawalVerification.otp': otp,
-            'withdrawalVerification.otpExpiry': Timestamp.fromDate(otpExpiry),
+            'withdrawalVerification.otpExpiry': admin.firestore.Timestamp.fromDate(otpExpiry),
             'withdrawalVerification.status': 'pending_otp',
         });
         
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, 
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
-            },
-        });
-
-        const mailOptions = {
-            from: `"TradeVission Security" <${process.env.EMAIL_USER}>`,
+        await transporter.sendMail({
+            from: `"TradeVission Security" <${nodemailerConfig.user}>`,
             to: userData.email,
             subject: `Your TradeVission Verification Code: ${otp}`,
             html: `
@@ -62,22 +71,229 @@ export async function POST(request: Request) {
                     <p style="font-size: 12px; color: #777;">Thank you,<br/>The TradeVission Team</p>
                 </div>
             `,
-        };
+        });
 
-        await transporter.sendMail(mailOptions);
-
-        return NextResponse.json({ success: true, message: 'OTP sent successfully.' });
-
+        return { success: true };
     } catch (error: any) {
-        console.error(`[OTP_SEND_ERROR] Failed to send OTP for user ${uid}:`, error);
+        functions.logger.error(`Error sending OTP for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'Failed to send OTP. Please check server logs and email configuration.');
+    }
+});
+
+/**
+ * A callable function that verifies the provided OTP for withdrawal.
+ */
+export const verifyWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    const uid = context.auth.uid;
+    const providedOtp = data.otp;
+
+    if (!providedOtp || typeof providedOtp !== 'string' || providedOtp.length !== 6) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid 6-digit OTP must be provided.');
+    }
+
+    const userRef = admin.firestore().collection('users').doc(uid);
+
+    try {
+        return await admin.firestore().runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new functions.https.HttpsError('not-found', 'User not found.');
+            }
+
+            const verificationData = userDoc.data()?.withdrawalVerification || {};
+
+            if (verificationData.status === 'locked' && verificationData.cooldownUntil && verificationData.cooldownUntil.toDate() > new Date()) {
+                throw new functions.https.HttpsError('failed-precondition', 'Account is locked. Please try again later.');
+            }
+
+            if (verificationData.otp !== providedOtp) {
+                const newAttempts = (verificationData.attempts || 0) + 1;
+                if (newAttempts >= 3) {
+                    const cooldownUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+                    transaction.update(userRef, {
+                        'withdrawalVerification.status': 'locked',
+                        'withdrawalVerification.attempts': newAttempts,
+                        'withdrawalVerification.cooldownUntil': admin.firestore.Timestamp.fromDate(cooldownUntil),
+                    });
+                     throw new functions.https.HttpsError('invalid-argument', 'Incorrect OTP. Your account is now locked for 24 hours.');
+                } else {
+                     transaction.update(userRef, { 'withdrawalVerification.attempts': newAttempts });
+                     throw new functions.https.HttpsError('invalid-argument', `Incorrect OTP. You have ${3 - newAttempts} attempts left.`);
+                }
+            }
+
+            if (!verificationData.otpExpiry || verificationData.otpExpiry.toDate() < new Date()) {
+                transaction.update(userRef, {
+                    'withdrawalVerification.otp': null,
+                    'withdrawalVerification.otpExpiry': null,
+                });
+                throw new functions.https.HttpsError('deadline-exceeded', 'OTP has expired. Please request a new one.');
+            }
+            
+            // Success
+            transaction.update(userRef, {
+                'withdrawalVerification.status': 'verified',
+                'withdrawalVerification.attempts': 0,
+                'withdrawalVerification.otp': null,
+                'withdrawalVerification.otpExpiry': null,
+                'withdrawalVerification.cooldownUntil': null,
+            });
+
+            return { success: true, message: 'Account verified successfully.' };
+        });
+    } catch (error: any) {
+        functions.logger.error(`Error verifying OTP for user ${uid}:`, error.message);
+        throw error; // Re-throw the original error to be caught by the client
+    }
+});
+
+
+/**
+ * A callable function that deletes a user account from Firebase Authentication and their main documents from Firestore.
+ * This function is designed to be fast and reliable.
+ */
+export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: '256MB'}).https.onCall(async (data, context) => {
+    // Check if the request is made by an authenticated admin user.
+    if (context.auth?.token.isAdmin !== true) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
+    }
+
+    const uid = data.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
+    }
+
+    try {
+        await admin.auth().deleteUser(uid);
+        functions.logger.log(`Successfully deleted auth user: ${uid}`);
+    } catch (error: any) {
+        if (error.code === 'auth/user-not-found') {
+          functions.logger.warn(`Auth user ${uid} not found, but proceeding with DB cleanup.`);
+        } else {
+          functions.logger.error(`Error deleting auth user ${uid}:`, error);
+          throw new functions.https.HttpsError('internal', 'Failed to delete user from authentication service.');
+        }
+    }
+
+    try {
+        const batch = admin.firestore().batch();
+        const userDocRef = admin.firestore().collection('users').doc(uid);
+        const cpmCoinDocRef = admin.firestore().collection('cpm_coins').doc(uid);
         
-        let clientMessage = 'Failed to send OTP. Please try again.';
-        if (error.code === 'EAUTH' || error.responseCode === 535) {
-            clientMessage = 'Server authentication failed. Please check server email credentials.';
-        } else if (error.code === 'ECONNREFUSED') {
-             clientMessage = 'Failed to connect to the email server. Please check the host/port settings.';
+        batch.delete(userDocRef);
+        batch.delete(cpmCoinDocRef);
+
+        await batch.commit();
+        functions.logger.log(`Successfully deleted Firestore documents for user: ${uid}`);
+    } catch (error: any) {
+        functions.logger.error(`Error deleting Firestore data for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'Failed to clean up user data from database.');
+    }
+
+    return { success: true, message: `Successfully deleted user ${uid}` };
+});
+
+
+/**
+ * A callable function to perform a "hard reset" on a user account.
+ * This wipes most of their progress data but does not delete their auth record.
+ */
+export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '512MB'}).https.onCall(async (data, context) => {
+    if (context.auth?.token.isAdmin !== true) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can reset user accounts.');
+    }
+
+    const uid = data.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
+    }
+
+    const db = admin.firestore();
+    const mainBatch = db.batch();
+
+    // 1. Reset main user document fields
+    const userRef = db.collection('users').doc(uid);
+    mainBatch.update(userRef, {
+        balance0: 0,
+        totalDeposit: 0,
+        totalWithdrawn: 0,
+        totalReferralBonus: 0,
+        totalTeamBonus: 0,
+        totalTeamDeposit: 0,
+        depositDone: false,
+        isCommander: false,
+        teamBonusPaused: false,
+        awardedSuperBonuses: [],
+        customBadges: [],
+        lastSpinTimestamp: null,
+        lastWeeklyRewardPaidAt: null,
+        withdrawalVerification: {
+            required: false,
+            status: 'not_verified',
+            attempts: 0,
+            cooldownUntil: null,
+            otp: null,
+            otpExpiry: null
+        }
+    });
+
+    // 2. Reset CPM coins document
+    const cpmCoinRef = db.collection('cpm_coins').doc(uid);
+    mainBatch.update(cpmCoinRef, { amount: 0 });
+
+    // Collections to delete documents from
+    const collectionsToDelete = [
+        'userPlans',
+        'deposits',
+        'withdrawals',
+        'cpmWithdrawals',
+        'supportTickets',
+        'feedback',
+        'kycSubmissions',
+        'cpm_purchase_logs',
+        'activityLogs',
+    ];
+
+    try {
+        // 3. Delete documents from top-level collections
+        for (const collectionName of collectionsToDelete) {
+            const snapshot = await db.collection(collectionName).where('userId', '==', uid).get();
+            if (!snapshot.empty) {
+                snapshot.forEach(doc => mainBatch.delete(doc.ref));
+            }
+        }
+        
+         // Also handle deposits collection which uses 'uid' field
+        const depositSnapshot = await db.collection('deposits').where('uid', '==', uid).get();
+        if(!depositSnapshot.empty) {
+            depositSnapshot.forEach(doc => mainBatch.delete(doc.ref));
         }
 
-        return NextResponse.json({ error: clientMessage }, { status: 500 });
+        // 4. Commit main batch changes
+        await mainBatch.commit();
+        functions.logger.log(`Main data reset for user ${uid}`);
+
+        // 5. Delete subcollections (requires separate operations)
+        const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
+        for (const sub of subcollections) {
+            const subcollectionRef = userRef.collection(sub);
+            const snapshot = await subcollectionRef.get();
+            if(!snapshot.empty) {
+                const deleteBatch = db.batch();
+                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                await deleteBatch.commit();
+            }
+        }
+        
+        functions.logger.log(`Subcollections deleted for user ${uid}`);
+
+        return { success: true, message: `User ${uid} has been successfully reset.` };
+    } catch (error: any) {
+        functions.logger.error(`Error during hard reset for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
     }
-}
+});

@@ -8,23 +8,30 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
-// Nodemailer transporter setup - REPLACE WITH YOUR EMAIL SERVICE DETAILS
+// Set Nodemailer config from Firebase environment variables
+const nodemailerConfig = functions.config().nodemailer;
 const transporter = createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
     auth: {
-        user: "ummarfarooq38990@gmail.com", 
-        pass: "ccdciqzvtkcqbune",
+        user: nodemailerConfig?.user,
+        pass: nodemailerConfig?.pass,
     },
 });
 
 /**
  * A callable function that sends a 6-digit OTP to the user's email for withdrawal verification.
  */
-export const sendWithdrawalOtp = functions.https.onCall(async (data, context) => {
+export const sendWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    
+    // Check if email and password are configured
+    if (!nodemailerConfig?.user || !nodemailerConfig?.pass) {
+        functions.logger.error("Nodemailer is not configured. Run 'firebase functions:config:set nodemailer.user=\"EMAIL\" nodemailer.pass=\"PASSWORD\"'");
+        throw new functions.https.HttpsError('internal', 'The email service is not configured.');
     }
 
     const uid = context.auth.uid;
@@ -37,8 +44,8 @@ export const sendWithdrawalOtp = functions.https.onCall(async (data, context) =>
         }
         
         const userData = userDoc.data();
-        if (!userData) {
-             throw new functions.https.HttpsError('not-found', 'User data is missing.');
+        if (!userData?.email) {
+             throw new functions.https.HttpsError('not-found', 'User email is missing.');
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -50,19 +57,19 @@ export const sendWithdrawalOtp = functions.https.onCall(async (data, context) =>
             'withdrawalVerification.status': 'pending_otp',
         });
         
-        // Send email using Nodemailer
         await transporter.sendMail({
-            from: '"TradeVission Security" <no-reply@tradevission.online>',
+            from: `"TradeVission Security" <${nodemailerConfig.user}>`,
             to: userData.email,
-            subject: 'Your Withdrawal Verification Code',
+            subject: `Your TradeVission Verification Code: ${otp}`,
             html: `
-                <div style="font-family: Arial, sans-serif; color: #333;">
-                    <h2>TradeVission Account Verification</h2>
-                    <p>Hello ${userData.name},</p>
-                    <p>A withdrawal attempt was initiated on your account. Please use the following verification code to proceed. If you did not initiate this, please secure your account immediately.</p>
-                    <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #000;">${otp}</p>
-                    <p>This code is valid for 10 minutes.</p>
-                    <p>Thank you,<br/>The TradeVission Team</p>
+                <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #ddd; border-radius: 10px; max-width: 600px; margin: auto; border-top: 5px solid #1E3A8A;">
+                    <h2 style="color: #1E3A8A;">TradeVission Account Verification</h2>
+                    <p>Hello ${userData.name || 'User'},</p>
+                    <p>Your one-time password (OTP) for withdrawal verification is:</p>
+                    <h2 style="font-size: 36px; font-weight: bold; letter-spacing: 4px; color: #1E3A8A; text-align: center; background-color: #f4f4f4; padding: 20px; border-radius: 5px;">${otp}</h2>
+                    <p>This code is valid for 10 minutes. If you did not request this code, please secure your account immediately.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                    <p style="font-size: 12px; color: #777;">Thank you,<br/>The TradeVission Team</p>
                 </div>
             `,
         });
@@ -70,14 +77,14 @@ export const sendWithdrawalOtp = functions.https.onCall(async (data, context) =>
         return { success: true };
     } catch (error: any) {
         functions.logger.error(`Error sending OTP for user ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', 'Failed to send OTP. Please try again.');
+        throw new functions.https.HttpsError('internal', 'Failed to send OTP. Please check server logs and email configuration.');
     }
 });
 
 /**
  * A callable function that verifies the provided OTP for withdrawal.
  */
-export const verifyWithdrawalOtp = functions.https.onCall(async (data, context) => {
+export const verifyWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
