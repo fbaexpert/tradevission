@@ -43,8 +43,6 @@ export function Footer() {
   useEffect(() => {
     if (!db) return;
     
-    console.log('Footer loading, fetching pages...');
-    
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
         if(doc.exists()) {
@@ -56,17 +54,13 @@ export function Footer() {
     });
 
     const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), orderBy("order", "asc"));
-    console.log('Firestore query:', pagesQuery);
     
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
-        console.log('Pages received:', snapshot.docs.length);
         const pages = snapshot.docs.map(doc => {
           const pageData = { id: doc.id, ...doc.data() } as DynamicLegalPage;
-          console.log('Page:', pageData.title, 'Category:', pageData.category);
           return pageData;
         });
         setDynamicPages(pages);
-        console.log('Rendering pages:', pages.length);
     }, (error) => {
         console.error("Error fetching website pages for footer:", error);
     });

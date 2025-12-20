@@ -130,9 +130,7 @@ export default function AdminWebsitePages() {
         await updateDoc(doc(db, "websitePages", editingPage.id), { ...data, updatedAt: serverTimestamp() });
         toast({ title: "Page Updated" });
       } else {
-        const docRef = await addDoc(collection(db, "websitePages"), { ...data, createdAt: serverTimestamp() });
-        console.log('Page created:', {category: data.category, title: data.title, id: docRef.id});
-        console.log('Firestore write result:', docRef.id);
+        await addDoc(collection(db, "websitePages"), { ...data, createdAt: serverTimestamp() });
         toast({ title: "Page Created" });
       }
       handleCancelEdit();
