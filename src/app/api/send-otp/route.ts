@@ -1,17 +1,13 @@
+
 import { NextResponse } from 'next/server';
 import { getFirebase } from '@/lib/firebase/config';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import nodemailer from 'nodemailer';
 
-require('dotenv').config();
-
-// IMPORTANT: Initialize Firebase Admin SDK for server-side operations if needed elsewhere,
-// but for client-called API routes, we'll use the regular SDK and check authentication.
+// In Next.js App Router, environment variables from .env.local are loaded automatically on the server.
+// The require('dotenv').config() call is not necessary and can be removed.
 
 export async function POST(request: Request) {
-    // This is a simplified auth check. In a real app, you'd use a library 
-    // like next-auth or verify the ID token from the request headers.
-    // For this example, we'll rely on the client sending the UID.
     const { uid } = await request.json();
 
     if (!uid) {
@@ -42,10 +38,11 @@ export async function POST(request: Request) {
         });
         
         // Nodemailer transporter setup
+        // Ensure EMAIL_USER and EMAIL_PASS are set in your .env.local file
         const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 587,
-            secure: false, // use true for 465, false for other ports
+            secure: false, // true for 465, false for other ports (like 587 with STARTTLS)
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS, // Use App Password for Gmail
@@ -53,12 +50,12 @@ export async function POST(request: Request) {
         });
 
         // Send email using Nodemailer
-        await transporter.sendMail({
+        const mailOptions = {
             from: `"TradeVission Security" <${process.env.EMAIL_USER}>`,
             to: userData.email,
             subject: `Your TradeVission Verification Code: ${otp}`,
             html: `
-                <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #ddd; border-radius: 10px; max-width: 600px; margin: auto;">
+                <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #ddd; border-radius: 10px; max-width: 600px; margin: auto; border-top: 5px solid #1E3A8A;">
                     <h2 style="color: #1E3A8A;">TradeVission Account Verification</h2>
                     <p>Hello ${userData.name || 'User'},</p>
                     <p>Your one-time password (OTP) for withdrawal verification is:</p>
@@ -68,12 +65,23 @@ export async function POST(request: Request) {
                     <p style="font-size: 12px; color: #777;">Thank you,<br/>The TradeVission Team</p>
                 </div>
             `,
-        });
+        };
+
+        await transporter.sendMail(mailOptions);
 
         return NextResponse.json({ success: true, message: 'OTP sent successfully.' });
 
     } catch (error: any) {
-        console.error(`Error sending OTP for user ${uid}:`, error);
-        return NextResponse.json({ error: 'Failed to send OTP. Please try again.' }, { status: 500 });
+        // Enhanced error logging to help diagnose the issue.
+        console.error(`[OTP_SEND_ERROR] Failed to send OTP for user ${uid}:`, error);
+        
+        let clientMessage = 'Failed to send OTP. Please try again.';
+        if (error.code === 'EAUTH') {
+            clientMessage = 'Failed to send email. Please check server email credentials.';
+        } else if (error.code === 'ECONNREFUSED') {
+             clientMessage = 'Failed to connect to the email server. Please check the host/port settings.';
+        }
+
+        return NextResponse.json({ error: clientMessage }, { status: 500 });
     }
 }
