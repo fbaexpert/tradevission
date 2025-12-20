@@ -147,7 +147,6 @@ export default function AdminLegalPage() {
     if (!db) return;
     setIsSubmitting(true);
     
-    // Correctly format the date for Firestore
     const payload = {
         ...data,
         lastUpdated: Timestamp.fromDate(data.lastUpdated),
@@ -277,58 +276,6 @@ export default function AdminLegalPage() {
               )}
             </div>
           </form>
-        </CardContent>
-      </Card>
-      
-      <Card>
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white font-bold"><Scale/> Existing Pages</CardTitle>
-            <CardDescription>A list of all created legal and policy pages.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            {loading ? <div className="flex justify-center p-8"><LoaderCircle className="animate-spin"/></div> : (
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Order</TableHead>
-                                <TableHead>Title</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Slug</TableHead>
-                                <TableHead>In Footer?</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {pages.map(page => (
-                                <TableRow key={page.id}>
-                                    <TableCell>{page.order}</TableCell>
-                                    <TableCell>{page.title}</TableCell>
-                                    <TableCell className="capitalize">{page.category}</TableCell>
-                                    <TableCell>/legal/{page.slug}</TableCell>
-                                    <TableCell>{page.inFooter ? "Yes" : "No"}</TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(page)}><Edit className="h-4 w-4"/></Button>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                    <AlertDialogDescription>This will permanently delete the "{page.title}" page.</AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDelete(page.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            )}
         </CardContent>
       </Card>
     </div>
