@@ -66,6 +66,12 @@ interface DepositBoostEvent {
     description: string;
 }
 
+interface FooterSettings {
+    description: string;
+    contactEmail: string;
+    copyrightText: string;
+}
+
 interface AppSettings {
     supportEmail: string;
     maintenanceMode: boolean;
@@ -75,6 +81,7 @@ interface AppSettings {
     commander: CommanderSettings;
     planTags?: PlanTag[];
     depositBoost?: DepositBoostEvent;
+    footer: FooterSettings;
 }
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -110,6 +117,11 @@ const defaultSettings: AppSettings = {
         bonusPercentage: 10,
         endTime: new Date().toISOString(),
         description: "Get a bonus on all deposits for a limited time.",
+    },
+    footer: {
+        description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
+        contactEmail: "tradevissionn@gmail.com",
+        copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
     }
 };
 
@@ -177,6 +189,10 @@ export default function AdminSettingsPage() {
                     depositBoost: {
                         ...defaultSettings.depositBoost!,
                         ...(data.depositBoost || {}),
+                    },
+                    footer: {
+                        ...defaultSettings.footer,
+                        ...(data.footer || {})
                     }
                 };
                 
@@ -447,6 +463,30 @@ export default function AdminSettingsPage() {
                         <p className="text-sm text-muted-foreground">
                             This email will be displayed to users for support inquiries.
                         </p>
+                    </div>
+
+                    {/* Footer Settings */}
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label className="text-base flex items-center gap-2">Footer Settings</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Edit the content displayed in the website footer.
+                            </p>
+                        </div>
+                        <div className="space-y-4 pt-4 border-t">
+                            <div className="space-y-2">
+                                <Label htmlFor="footer-desc">Description</Label>
+                                <Textarea id="footer-desc" value={settings.footer.description} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, description: e.target.value}}): null)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="footer-email">Contact Email</Label>
+                                <Input id="footer-email" type="email" value={settings.footer.contactEmail} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, contactEmail: e.target.value}}): null)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="footer-copyright">Copyright Text</Label>
+                                <Input id="footer-copyright" value={settings.footer.copyrightText} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, copyrightText: e.target.value}}): null)} />
+                            </div>
+                        </div>
                     </div>
 
                     {/* Deposit Boost Event Settings */}

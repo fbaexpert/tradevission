@@ -3,19 +3,50 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LegalDialog } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail, Phone } from "lucide-react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { useFirebase } from "@/lib/firebase/provider";
+
 
 type LegalPage = 'privacy' | 'terms' | 'refund' | 'disclaimer' | 'earnings' | 'cookies' | 'risk' | 'anti-fraud' | 'deposit' | 'withdrawal' | 'affiliate' | 'kyc';
 
+interface FooterSettings {
+    description: string;
+    contactEmail: string;
+    copyrightText: string;
+}
+
 export function Footer() {
   const pathname = usePathname();
+  const { db } = useFirebase();
   const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<LegalPage>('privacy');
+  
+  const [footerSettings, setFooterSettings] = useState<FooterSettings>({
+      description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
+      contactEmail: "tradevissionn@gmail.com",
+      copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
+  });
+
+  useEffect(() => {
+    if (!db) return;
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
+        if(doc.exists()) {
+            const data = doc.data();
+            if (data.footer) {
+                setFooterSettings(data.footer);
+            }
+        }
+    });
+    return () => unsubscribe();
+  }, [db]);
+
 
   const handleLinkClick = (page: LegalPage) => {
     setDialogContent(page);
@@ -63,7 +94,7 @@ export function Footer() {
                         TradeVission
                     </h1>
                 </div>
-                 <p className="text-muted-foreground text-sm">A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.</p>
+                 <p className="text-muted-foreground text-sm">{footerSettings.description}</p>
               </div>
 
               <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
@@ -99,16 +130,16 @@ export function Footer() {
                <div>
                     <h4 className="font-bold text-white mb-4">Contact Us</h4>
                     <div className="flex flex-col gap-3">
-                        <a href="mailto:tradevissionn@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                        <a href={`mailto:${footerSettings.contactEmail}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
                             <Mail className="h-4 w-4"/>
-                            tradevissionn@gmail.com
+                            {footerSettings.contactEmail}
                         </a>
                     </div>
               </div>
           </div>
            <div className="mt-12 pt-8 border-t border-border/20 text-center">
                <p className="text-sm text-muted-foreground">
-                  © 2023-2026 TradeVission. All Rights Reserved.
+                  {footerSettings.copyrightText}
               </p>
            </div>
       </footer>
