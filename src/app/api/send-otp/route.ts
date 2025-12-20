@@ -3,6 +3,8 @@ import { getFirebase } from '@/lib/firebase/config';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import nodemailer from 'nodemailer';
 
+require('dotenv').config();
+
 // IMPORTANT: Initialize Firebase Admin SDK for server-side operations if needed elsewhere,
 // but for client-called API routes, we'll use the regular SDK and check authentication.
 
