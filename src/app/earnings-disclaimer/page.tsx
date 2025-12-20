@@ -1,53 +1,159 @@
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Footer } from "@/components/shared/footer";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/shared/logo";
-import { ArrowLeft } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
+import { Logo } from "./logo";
+import { Mail } from "lucide-react";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { useFirebase } from "@/lib/firebase/provider";
 
-export default function EarningsDisclaimerPage() {
+interface FooterSettings {
+    description: string;
+    contactEmail: string;
+    copyrightText: string;
+}
+
+interface DynamicLegalPage {
+  id: string;
+  title: string;
+  slug: string;
+  category: 'legal' | 'policy';
+  order: number;
+}
+
+export function Footer() {
+  const pathname = usePathname();
+  const { db } = useFirebase();
+  const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy-policy');
+  
+  const [footerSettings, setFooterSettings] = useState<FooterSettings>({
+      description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
+      contactEmail: "tradevissionn@gmail.com",
+      copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
+  });
+
+  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
+
+  useEffect(() => {
+    if (!db) return;
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
+        if(doc.exists()) {
+            const data = doc.data();
+            if (data.footer) {
+                setFooterSettings(data.footer);
+            }
+        }
+    });
+
+    const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
+    const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
+        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
+        setDynamicLegalLinks(links);
+    });
+
+    return () => {
+        unsubscribeSettings();
+        unsubscribeLegal();
+    };
+  }, [db]);
+
+  const handleLinkClick = (slug: LegalPageType) => {
+    setDialogContent(slug);
+    setDialogOpen(true);
+  }
+
+  const renderLink = (page: {slug: string, title: string}) => {
+      if (isInDashboard) {
+        return (
+          <button onClick={() => handleLinkClick(page.slug as LegalPageType)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
+            {page.title}
+          </button>
+        );
+      }
+      return (
+        <Link href={`/legal/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+          {page.title}
+        </Link>
+      );
+  }
+  
+  const aboutLinks = [
+    { label: 'About Us', href: '/#about'},
+    { label: 'How It Works', href: '/#how-it-works'},
+  ];
+
+  const legalLinks = dynamicLegalLinks.filter(l => l.category === 'legal');
+  const policyLinks = dynamicLegalLinks.filter(l => l.category === 'policy');
+
+
   return (
-    <div className="bg-background text-foreground min-h-screen flex flex-col">
-       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
-        <div className="flex items-center gap-3">
-          <Logo />
-          <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
-            TradeVission
-          </h1>
-        </div>
-        <nav>
-          <Button asChild variant="outline">
-            <Link href="/"><ArrowLeft className="mr-2"/> Back to Home</Link>
-          </Button>
-        </nav>
-      </header>
-      <main className="flex-grow p-4 sm:p-6 md:p-8">
-        <div className="container mx-auto max-w-4xl">
-            <Card className="border-border/20 shadow-lg shadow-primary/5">
-                <CardHeader>
-                    <CardTitle className="text-3xl font-bold text-white">Earnings Disclaimer</CardTitle>
-                    <CardDescription>Last Updated: 7 December 2025</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6 text-muted-foreground">
-                    <section>
-                        <h3 className="font-bold text-white mb-2 text-lg">No Guarantee of Income</h3>
-                        <p>TradeVission makes no guarantees regarding the level of success you may experience. Any earnings, revenue, or income statements are estimates of potential earnings only, and should not be considered as typical or guaranteed.</p>
-                        <p className="mt-2">Your individual success will depend on your personal effort, the specific investment plan you choose, and external market factors that are beyond our control.</p>
-                    </section>
-                     <section>
-                        <h3 className="font-bold text-white mb-2 text-lg">For Educational & Entertainment Purposes</h3>
-                        <p>Our platform is designed for educational and entertainment purposes. The "Points" system and associated rewards are part of a simulated environment. While points can be redeemed according to our withdrawal policy, they do not represent a direct claim on real currency or assets.</p>
-                    </section>
-                    <section>
-                        <h3 className="font-bold text-white mb-2 text-lg">Testimonials and Examples</h3>
-                        <p>Testimonials and examples used are exceptional results, do not apply to the average user, and are not intended to represent or guarantee that anyone will achieve the same or similar results.</p>
-                    </section>
-                </CardContent>
-            </Card>
-        </div>
-      </main>
-      <Footer />
-    </div>
+    <>
+      <footer className="border-t border-border/20 py-12 px-6 bg-background">
+          <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="md:col-span-1 space-y-4">
+                 <div className="flex items-center gap-3">
+                    <Logo />
+                    <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
+                        TradeVission
+                    </h1>
+                </div>
+                 <p className="text-muted-foreground text-sm">{footerSettings.description}</p>
+              </div>
+
+              <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
+                  <div>
+                      <h4 className="font-bold text-white mb-4">About</h4>
+                      <nav className="flex flex-col gap-2">
+                        {aboutLinks.map(link => (
+                             <Link key={link.href} href={link.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">{link.label}</Link>
+                        ))}
+                      </nav>
+                  </div>
+                   <div>
+                      <h4 className="font-bold text-white mb-4">Legal</h4>
+                      <nav className="flex flex-col gap-2">
+                         {legalLinks.map(link => (
+                            <div key={link.slug}>
+                              {renderLink(link)}
+                            </div>
+                         ))}
+                      </nav>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-4">Policies</h4>
+                    <nav className="flex flex-col gap-2">
+                        {policyLinks.map(link => (
+                            <div key={link.slug}>
+                               {renderLink(link)}
+                            </div>
+                         ))}
+                    </nav>
+                  </div>
+              </div>
+
+               <div>
+                    <h4 className="font-bold text-white mb-4">Contact Us</h4>
+                    <div className="flex flex-col gap-3">
+                        <a href={`mailto:${footerSettings.contactEmail}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                            <Mail className="h-4 w-4"/>
+                            {footerSettings.contactEmail}
+                        </a>
+                    </div>
+              </div>
+          </div>
+           <div className="mt-12 pt-8 border-t border-border/20 text-center">
+               <p className="text-sm text-muted-foreground">
+                  {footerSettings.copyrightText}
+              </p>
+           </div>
+      </footer>
+      {isInDashboard && <LegalDialog open={dialogOpen} onOpenChange={setDialogOpen} content={dialogContent} />}
+    </>
   );
 }

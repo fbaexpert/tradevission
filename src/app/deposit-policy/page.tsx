@@ -1,91 +1,159 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Button } from "@/components/ui/button"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
+import { Logo } from "./logo";
+import { Mail } from "lucide-react";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
-import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
-import { LoaderCircle } from "lucide-react";
-import { format } from "date-fns";
 
-export type LegalPage = 'privacy-policy' | 'terms-and-conditions' | 'refund-policy' | 'disclaimer' | 'earnings-disclaimer' | 'cookies-policy' | 'risk-warning' | 'anti-fraud-policy' | 'deposit-policy' | 'withdrawal-policy' | 'affiliate-terms' | 'kyc-policy' | string;
-
-interface PageContent {
-    title: string;
-    content: string;
-    lastUpdated: Timestamp;
+interface FooterSettings {
+    description: string;
+    contactEmail: string;
+    copyrightText: string;
 }
 
-interface LegalDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    content: LegalPage;
+interface DynamicLegalPage {
+  id: string;
+  title: string;
+  slug: string;
+  category: 'legal' | 'policy';
+  order: number;
 }
 
-export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogProps) {
+export function Footer() {
+  const pathname = usePathname();
   const { db } = useFirebase();
-  const [pageContent, setPageContent] = useState<PageContent | null>(null);
-  const [loading, setLoading] = useState(true);
+  const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy-policy');
+  
+  const [footerSettings, setFooterSettings] = useState<FooterSettings>({
+      description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
+      contactEmail: "tradevissionn@gmail.com",
+      copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
+  });
+
+  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
 
   useEffect(() => {
-    if (open && db && slug) {
-      const fetchContent = async () => {
-        setLoading(true);
-        const q = query(collection(db, "legal"), where("slug", "==", slug));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          setPageContent(snapshot.docs[0].data() as PageContent);
-        } else {
-          setPageContent(null);
+    if (!db) return;
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
+        if(doc.exists()) {
+            const data = doc.data();
+            if (data.footer) {
+                setFooterSettings(data.footer);
+            }
         }
-        setLoading(false);
-      };
-      fetchContent();
-    }
-  }, [open, db, slug]);
+    });
+
+    const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
+    const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
+        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
+        setDynamicLegalLinks(links);
+    });
+
+    return () => {
+        unsubscribeSettings();
+        unsubscribeLegal();
+    };
+  }, [db]);
+
+  const handleLinkClick = (slug: LegalPageType) => {
+    setDialogContent(slug);
+    setDialogOpen(true);
+  }
+
+  const renderLink = (page: {slug: string, title: string}) => {
+      if (isInDashboard) {
+        return (
+          <button onClick={() => handleLinkClick(page.slug as LegalPageType)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
+            {page.title}
+          </button>
+        );
+      }
+      return (
+        <Link href={`/legal/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+          {page.title}
+        </Link>
+      );
+  }
+  
+  const aboutLinks = [
+    { label: 'About Us', href: '/#about'},
+    { label: 'How It Works', href: '/#how-it-works'},
+  ];
+
+  const legalLinks = dynamicLegalLinks.filter(l => l.category === 'legal');
+  const policyLinks = dynamicLegalLinks.filter(l => l.category === 'policy');
+
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[625px]">
-        {loading ? (
-             <div className="flex justify-center items-center h-96">
-                <LoaderCircle className="animate-spin" />
-             </div>
-        ) : pageContent ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{pageContent.title}</DialogTitle>
-              <DialogDescription>
-                Last Updated: {format(pageContent.lastUpdated.toDate(), "PPP")}
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="h-96 pr-6">
-                <div 
-                    className="prose prose-sm prose-invert max-w-none text-muted-foreground prose-headings:text-white prose-strong:text-white"
-                    dangerouslySetInnerHTML={{ __html: pageContent.content.replace(/\n/g, '<br />') }}
-                />
-            </ScrollArea>
-            <DialogFooter>
-                <Button onClick={() => onOpenChange(false)}>Close</Button>
-            </DialogFooter>
-          </>
-        ) : (
-             <DialogHeader>
-              <DialogTitle>Content Not Found</DialogTitle>
-              <DialogDescription>
-                The content for this page could not be loaded.
-              </DialogDescription>
-            </DialogHeader>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
+    <>
+      <footer className="border-t border-border/20 py-12 px-6 bg-background">
+          <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="md:col-span-1 space-y-4">
+                 <div className="flex items-center gap-3">
+                    <Logo />
+                    <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
+                        TradeVission
+                    </h1>
+                </div>
+                 <p className="text-muted-foreground text-sm">{footerSettings.description}</p>
+              </div>
+
+              <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
+                  <div>
+                      <h4 className="font-bold text-white mb-4">About</h4>
+                      <nav className="flex flex-col gap-2">
+                        {aboutLinks.map(link => (
+                             <Link key={link.href} href={link.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">{link.label}</Link>
+                        ))}
+                      </nav>
+                  </div>
+                   <div>
+                      <h4 className="font-bold text-white mb-4">Legal</h4>
+                      <nav className="flex flex-col gap-2">
+                         {legalLinks.map(link => (
+                            <div key={link.slug}>
+                              {renderLink(link)}
+                            </div>
+                         ))}
+                      </nav>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-4">Policies</h4>
+                    <nav className="flex flex-col gap-2">
+                        {policyLinks.map(link => (
+                            <div key={link.slug}>
+                               {renderLink(link)}
+                            </div>
+                         ))}
+                    </nav>
+                  </div>
+              </div>
+
+               <div>
+                    <h4 className="font-bold text-white mb-4">Contact Us</h4>
+                    <div className="flex flex-col gap-3">
+                        <a href={`mailto:${footerSettings.contactEmail}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                            <Mail className="h-4 w-4"/>
+                            {footerSettings.contactEmail}
+                        </a>
+                    </div>
+              </div>
+          </div>
+           <div className="mt-12 pt-8 border-t border-border/20 text-center">
+               <p className="text-sm text-muted-foreground">
+                  {footerSettings.copyrightText}
+              </p>
+           </div>
+      </footer>
+      {isInDashboard && <LegalDialog open={dialogOpen} onOpenChange={setDialogOpen} content={dialogContent} />}
+    </>
+  );
 }

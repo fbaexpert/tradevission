@@ -20,6 +20,7 @@ interface DynamicLegalPage {
   id: string;
   title: string;
   slug: string;
+  category: 'legal' | 'policy';
   order: number;
 }
 
@@ -29,7 +30,7 @@ export function Footer() {
   const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy');
+  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy-policy');
   
   const [footerSettings, setFooterSettings] = useState<FooterSettings>({
       description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
@@ -88,26 +89,8 @@ export function Footer() {
     { label: 'How It Works', href: '/#how-it-works'},
   ];
 
-  const staticLegalLinks = [
-    { title: 'Privacy Policy', slug: 'privacy-policy'},
-    { title: 'Terms & Conditions', slug: 'terms-and-conditions'},
-    { title: 'Refund Policy', slug: 'refund-policy'},
-    { title: 'Disclaimer', slug: 'disclaimer'},
-  ];
-
-  const staticPolicyLinks = [
-    { title: 'Earnings Disclaimer', slug: 'earnings-disclaimer'},
-    { title: 'Cookies Policy', slug: 'cookies-policy'},
-    { title: 'Risk Warning', slug: 'risk-warning'},
-    { title: 'Anti-Fraud Policy', slug: 'anti-fraud-policy'},
-    { title: 'Deposit Policy', slug: 'deposit-policy'},
-    { title: 'Withdrawal Policy', slug: 'withdrawal-policy'},
-    { title: 'Affiliate Terms', slug: 'affiliate-terms'},
-    { title: 'KYC Policy', slug: 'kyc-policy'},
-  ];
-
-  const allLegalLinks = [...staticLegalLinks, ...dynamicLegalLinks.filter(d => staticLegalLinks.every(s => s.slug !== d.slug))];
-  const allPolicyLinks = [...staticPolicyLinks, ...dynamicLegalLinks.filter(d => staticPolicyLinks.every(s => s.slug !== d.slug))];
+  const legalLinks = dynamicLegalLinks.filter(l => l.category === 'legal');
+  const policyLinks = dynamicLegalLinks.filter(l => l.category === 'policy');
 
 
   return (
@@ -136,7 +119,7 @@ export function Footer() {
                    <div>
                       <h4 className="font-bold text-white mb-4">Legal</h4>
                       <nav className="flex flex-col gap-2">
-                         {allLegalLinks.slice(0, 4).map(link => (
+                         {legalLinks.map(link => (
                             <div key={link.slug}>
                               {renderLink(link)}
                             </div>
@@ -146,7 +129,7 @@ export function Footer() {
                   <div>
                     <h4 className="font-bold text-white mb-4">Policies</h4>
                     <nav className="flex flex-col gap-2">
-                        {allPolicyLinks.map(link => (
+                        {policyLinks.map(link => (
                             <div key={link.slug}>
                                {renderLink(link)}
                             </div>

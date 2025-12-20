@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -51,12 +52,14 @@ import {
 } from "@/components/ui/table";
 import { LoaderCircle, Scale, PlusCircle, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const legalPageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   slug: z.string().min(3, "Slug is required.").regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens."),
   content: z.string().min(20, "Content must be at least 20 characters."),
   lastUpdated: z.date(),
+  category: z.enum(['legal', 'policy']).default('policy'),
   inFooter: z.boolean().default(true),
   order: z.coerce.number().default(0),
 });
@@ -82,6 +85,7 @@ export default function AdminLegalPage() {
       slug: "",
       content: "",
       lastUpdated: new Date(),
+      category: 'policy',
       inFooter: true,
       order: 0,
     },
@@ -153,6 +157,7 @@ export default function AdminLegalPage() {
       slug: "",
       content: "",
       lastUpdated: new Date(),
+      category: 'policy',
       inFooter: true,
       order: 0,
     });
@@ -177,7 +182,7 @@ export default function AdminLegalPage() {
             {editingPage ? "Edit Legal Page" : "Create New Legal Page"}
           </CardTitle>
           <CardDescription>
-            Manage the legal pages that appear in your website's footer.
+            Manage the legal and policy pages that appear in your website's footer.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -199,7 +204,23 @@ export default function AdminLegalPage() {
               <Textarea id="content" {...form.register("content")} rows={10} />
               {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
             </div>
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Controller
+                        name="category"
+                        control={form.control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="legal">Legal</SelectItem>
+                                    <SelectItem value="policy">Policy</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                </div>
                  <div className="space-y-2">
                     <Label htmlFor="order">Footer Order</Label>
                     <Input id="order" type="number" {...form.register("order")} />
@@ -237,7 +258,7 @@ export default function AdminLegalPage() {
       <Card>
         <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white font-bold"><Scale/> Existing Pages</CardTitle>
-            <CardDescription>A list of all created legal pages.</CardDescription>
+            <CardDescription>A list of all created legal and policy pages.</CardDescription>
         </CardHeader>
         <CardContent>
             {loading ? <div className="flex justify-center p-8"><LoaderCircle className="animate-spin"/></div> : (
@@ -247,8 +268,8 @@ export default function AdminLegalPage() {
                             <TableRow>
                                 <TableHead>Order</TableHead>
                                 <TableHead>Title</TableHead>
+                                <TableHead>Category</TableHead>
                                 <TableHead>Slug</TableHead>
-                                <TableHead>Last Updated</TableHead>
                                 <TableHead>In Footer?</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -258,8 +279,8 @@ export default function AdminLegalPage() {
                                 <TableRow key={page.id}>
                                     <TableCell>{page.order}</TableCell>
                                     <TableCell>{page.title}</TableCell>
+                                    <TableCell className="capitalize">{page.category}</TableCell>
                                     <TableCell>/legal/{page.slug}</TableCell>
-                                    <TableCell>{format(page.lastUpdated, "PPP")}</TableCell>
                                     <TableCell>{page.inFooter ? "Yes" : "No"}</TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(page)}><Edit className="h-4 w-4"/></Button>
