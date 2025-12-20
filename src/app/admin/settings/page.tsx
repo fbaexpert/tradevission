@@ -2,14 +2,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, collection } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, LoaderCircle, Trash2, PlusCircle, Gift, Percent, Calendar as CalendarIcon, Star, Palette, Tag, Zap } from "lucide-react";
+import { Settings, LoaderCircle, Trash2, PlusCircle, Gift, Percent, Calendar as CalendarIcon, Star, Palette, Tag, Zap, ShieldAlert } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,6 +18,21 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useFirebase } from "@/lib/firebase/provider";
 import { nanoid } from "nanoid";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogContent } from "@/components/ui/dialog";
+import { useAuth } from "@/context/auth-context";
+import { reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+
 
 interface WithdrawalSettings {
     open: boolean;
@@ -98,12 +113,40 @@ const defaultSettings: AppSettings = {
     }
 };
 
+const COLLECTIONS_TO_DELETE = [
+    "activityLogs",
+    "adminAlerts",
+    "airdrops",
+    "announcements",
+    "cpm_purchase_logs",
+    "cpmWithdrawals",
+    "deposits",
+    "feedback",
+    "kycSubmissions",
+    "notification_logs",
+    "supportTickets",
+    "userPlans",
+    "vipCodes",
+    "vipMailbox",
+    "withdrawals",
+];
+
+
 export default function AdminSettingsPage() {
-    const { db } = useFirebase();
+    const { user } = useAuth();
+    const { db, auth } = useFirebase();
     const [settings, setSettings] = useState<AppSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const { toast } = useToast();
+
+    // Emergency Reset State
+    const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+    const [resetPassword, setResetPassword] = useState("");
+    const [resetTypedConfirm, setResetTypedConfirm] = useState("");
+    const [isCountdownActive, setIsCountdownActive] = useState(false);
+    const [countdown, setCountdown] = useState(60);
+    const [isResetting, setIsResetting] = useState(false);
 
     useEffect(() => {
         if (!db) return;
@@ -150,6 +193,17 @@ export default function AdminSettingsPage() {
 
         return () => unsubscribe();
     }, [db]);
+    
+    // Countdown timer effect
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (isCountdownActive && countdown > 0) {
+            timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+        } else if (isCountdownActive && countdown === 0) {
+            handleFinalReset();
+        }
+        return () => clearTimeout(timer);
+    }, [isCountdownActive, countdown]);
 
     const handleSave = () => {
         if (!settings || !db) return;
@@ -172,6 +226,86 @@ export default function AdminSettingsPage() {
             setSaving(false);
         });
     };
+
+    const handleStartResetCountdown = async () => {
+        if (!user || !user.email) {
+            toast({ variant: "destructive", title: "Authentication Error", description: "Cannot verify your identity."});
+            return;
+        }
+        
+        if(resetTypedConfirm !== 'RESET') {
+            toast({ variant: "destructive", title: "Confirmation Failed", description: "You must type 'RESET' to confirm."});
+            return;
+        }
+
+        setIsResetting(true);
+        try {
+            const credential = EmailAuthProvider.credential(user.email, resetPassword);
+            await reauthenticateWithCredential(user, credential);
+            
+            // Re-authentication successful, start countdown
+            setIsResetConfirmOpen(false);
+            setIsCountdownActive(true);
+            toast({ title: "Countdown Started", description: "System reset will begin in 60 seconds. You can still cancel."});
+
+        } catch (error) {
+            toast({ variant: "destructive", title: "Authentication Failed", description: "Incorrect password. Reset has been cancelled."});
+            setIsResetting(false);
+        }
+    }
+    
+    const handleFinalReset = async () => {
+        if (!db || !user) return;
+        setIsResetting(true);
+        setIsCountdownActive(false);
+
+        toast({ title: "System Reset In Progress...", description: "This may take a few moments. Do not close this page." });
+
+        try {
+            // Log the action
+            const logRef = doc(collection(db, "admin_reset_logs"));
+            await setDoc(logRef, {
+                adminId: user.uid,
+                adminEmail: user.email,
+                resetAt: serverTimestamp(),
+                collectionsDeleted: COLLECTIONS_TO_DELETE
+            });
+            
+            // Delete all specified collections
+            for (const collectionName of COLLECTIONS_TO_DELETE) {
+                const querySnapshot = await getDocs(collection(db, collectionName));
+                if(querySnapshot.empty) continue;
+
+                const deleteBatch = writeBatch(db);
+                querySnapshot.docs.forEach(doc => {
+                    deleteBatch.delete(doc.ref);
+                });
+                await deleteBatch.commit();
+            }
+
+            toast({ title: "✅ System Reset Complete", description: "Specified user data has been cleared from the database." });
+            
+            // Reset state
+            setResetPassword("");
+            setResetTypedConfirm("");
+            setIsResetting(false);
+
+        } catch (error: any) {
+            console.error("EMERGENCY RESET FAILED:", error);
+            toast({ variant: "destructive", title: "RESET FAILED", description: error.message || "An unexpected error occurred during the reset process." });
+            setIsResetting(false);
+        }
+    };
+    
+    const cancelCountdown = () => {
+        setIsCountdownActive(false);
+        setCountdown(60);
+        setIsResetting(false);
+        setResetPassword("");
+        setResetTypedConfirm("");
+        toast({ title: "Reset Cancelled", description: "The system reset has been cancelled." });
+    };
+
 
     const handleWithdrawalDayToggle = (day: string, checked: boolean) => {
         if (!settings) return;
@@ -266,6 +400,7 @@ export default function AdminSettingsPage() {
     }
 
     return (
+        <>
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white font-bold"><Settings/>Global Settings</CardTitle>
@@ -570,5 +705,104 @@ export default function AdminSettingsPage() {
                 </Button>
             </CardContent>
         </Card>
+        
+        {/* Emergency Reset Section */}
+        <Card className="border-destructive/50 bg-destructive/10">
+             <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive"><ShieldAlert/> Emergency Actions</CardTitle>
+                <CardDescription className="text-destructive/80">
+                   Use these actions only in critical situations. These actions are irreversible.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive">
+                           Emergency System Reset
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>ARE YOU ABSOLUTELY SURE?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This is an irreversible action that will delete most user-generated data from the database, including user plans, deposits, withdrawals, tickets, and logs.
+                                <strong className="block mt-2">This CANNOT be undone.</strong>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => setIsResetConfirmOpen(true)} className="bg-destructive hover:bg-destructive/90">I Understand, Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
+        </Card>
+        </>
+        
+        {/* Final Confirmation Dialog */}
+        <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Final Confirmation: System Reset</DialogTitle>
+                    <DialogDescription>
+                        To proceed, please type 'RESET' and enter your admin password. The reset will begin after a 60-second countdown.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="reset-confirm-text">Type "RESET" to confirm</Label>
+                        <Input 
+                            id="reset-confirm-text" 
+                            value={resetTypedConfirm}
+                            onChange={(e) => setResetTypedConfirm(e.target.value)}
+                            placeholder="RESET"
+                            className="font-mono tracking-widest"
+                            disabled={isResetting}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="reset-password">Your Admin Password</Label>
+                        <Input 
+                            id="reset-password" 
+                            type="password"
+                            value={resetPassword}
+                            onChange={(e) => setResetPassword(e.target.value)}
+                            placeholder="••••••••"
+                            disabled={isResetting}
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsResetConfirmOpen(false)} disabled={isResetting}>Cancel</Button>
+                    <Button variant="destructive" onClick={handleStartResetCountdown} disabled={isResetting || !resetPassword || resetTypedConfirm !== 'RESET'}>
+                        {isResetting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                        Initiate Reset
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        
+        {/* Countdown Dialog */}
+         <Dialog open={isCountdownActive}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle className="text-destructive text-center">SYSTEM RESET IN PROGRESS</DialogTitle>
+                    <DialogDescription className="text-center">
+                        All specified collections will be deleted in...
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-center items-center py-8">
+                    <div className="text-8xl font-mono font-bold text-destructive">
+                        {countdown}
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="secondary" className="w-full" onClick={cancelCountdown}>
+                        CANCEL RESET
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
+
