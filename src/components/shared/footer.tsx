@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
@@ -89,8 +89,18 @@ export function Footer() {
     { label: 'How It Works', href: '/#how-it-works'},
   ];
 
-  const legalLinks = dynamicLegalLinks.filter(l => l.category === 'legal');
-  const policyLinks = dynamicLegalLinks.filter(l => l.category === 'policy');
+  const { legalLinks, policyLinks } = useMemo(() => {
+    const legal: DynamicLegalPage[] = [];
+    const policy: DynamicLegalPage[] = [];
+    dynamicLegalLinks.forEach(link => {
+      if (link.category === 'legal') {
+        legal.push(link);
+      } else if (link.category === 'policy') {
+        policy.push(link);
+      }
+    });
+    return { legalLinks: legal, policyLinks: policy };
+  }, [dynamicLegalLinks]);
 
 
   return (
