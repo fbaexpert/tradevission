@@ -3,11 +3,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 
 interface FooterSettings {
@@ -38,8 +38,7 @@ export function Footer() {
       copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
   });
 
-  const [legalLinks, setLegalLinks] = useState<DynamicLegalPage[]>([]);
-  const [policyLinks, setPolicyLinks] = useState<DynamicLegalPage[]>([]);
+  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
 
   useEffect(() => {
     if (!db) return;
@@ -56,8 +55,9 @@ export function Footer() {
     const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
     const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
         const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
-        setLegalLinks(links.filter(l => l.category === 'legal'));
-        setPolicyLinks(links.filter(l => l.category === 'policy'));
+        setDynamicLegalLinks(links);
+    }, (error) => {
+        console.error("Error fetching legal links for footer:", error);
     });
 
     return () => {
@@ -65,6 +65,13 @@ export function Footer() {
         unsubscribeLegal();
     };
   }, [db]);
+
+  const { legalLinks, policyLinks } = useMemo(() => {
+    const legal = dynamicLegalLinks.filter(l => l.category === 'legal');
+    const policy = dynamicLegalLinks.filter(l => l.category === 'policy');
+    return { legalLinks: legal, policyLinks: policy };
+  }, [dynamicLegalLinks]);
+
 
   const handleLinkClick = (slug: LegalPageType) => {
     setDialogContent(slug);

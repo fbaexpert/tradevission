@@ -112,7 +112,7 @@ export default function AdminLegalPage() {
         }
     }
 
-    seedDatabase().then(() => {
+    const setupListener = () => {
         const q = query(collection(db, "legal"), orderBy("order", "asc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
           const pagesData = snapshot.docs.map(
@@ -124,12 +124,21 @@ export default function AdminLegalPage() {
           );
           setPages(pagesData);
           setLoading(false);
+        }, (error) => {
+            console.error("Error fetching legal pages:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not fetch legal pages."});
+            setLoading(false);
         });
         return unsubscribe;
+    };
+    
+    seedDatabase().then(() => {
+        setupListener();
     }).catch(error => {
-        console.error("Error during seeding or fetching:", error);
-        toast({ variant: "destructive", title: "Initialization Failed", description: "Could not set up or fetch legal pages."});
-        setLoading(false);
+        console.error("Error during seeding:", error);
+        toast({ variant: "destructive", title: "Initialization Failed", description: "Could not set up legal pages."});
+        // Still try to set up listener in case seeding failed but data exists
+        setupListener();
     });
 
   }, [db, toast]);
