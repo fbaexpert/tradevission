@@ -4,8 +4,8 @@ import { getFirebase } from '@/lib/firebase/config';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import nodemailer from 'nodemailer';
 
-// In Next.js App Router, environment variables from .env.local are loaded automatically on the server.
-// The require('dotenv').config() call is not necessary and can be removed.
+// This is required to load environment variables from .env.local
+require('dotenv').config();
 
 export async function POST(request: Request) {
     const { uid } = await request.json();
@@ -37,19 +37,16 @@ export async function POST(request: Request) {
             'withdrawalVerification.status': 'pending_otp',
         });
         
-        // Nodemailer transporter setup
-        // Ensure EMAIL_USER and EMAIL_PASS are set in your .env.local file
         const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 587,
-            secure: false, // true for 465, false for other ports (like 587 with STARTTLS)
+            secure: false, 
             auth: {
                 user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS, // Use App Password for Gmail
+                pass: process.env.EMAIL_PASS,
             },
         });
 
-        // Send email using Nodemailer
         const mailOptions = {
             from: `"TradeVission Security" <${process.env.EMAIL_USER}>`,
             to: userData.email,
@@ -72,12 +69,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, message: 'OTP sent successfully.' });
 
     } catch (error: any) {
-        // Enhanced error logging to help diagnose the issue.
         console.error(`[OTP_SEND_ERROR] Failed to send OTP for user ${uid}:`, error);
         
         let clientMessage = 'Failed to send OTP. Please try again.';
-        if (error.code === 'EAUTH') {
-            clientMessage = 'Failed to send email. Please check server email credentials.';
+        if (error.code === 'EAUTH' || error.responseCode === 535) {
+            clientMessage = 'Server authentication failed. Please check server email credentials.';
         } else if (error.code === 'ECONNREFUSED') {
              clientMessage = 'Failed to connect to the email server. Please check the host/port settings.';
         }
