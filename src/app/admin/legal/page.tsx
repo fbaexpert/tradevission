@@ -12,10 +12,11 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  serverTimestamp,
+  Timestamp,
   query,
   orderBy,
-  Timestamp,
+  getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,7 @@ import {
 import { LoaderCircle, Scale, PlusCircle, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { defaultLegalPages } from "@/lib/default-legal-content";
 
 const legalPageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
@@ -95,20 +97,42 @@ export default function AdminLegalPage() {
     if (!db) return;
     setLoading(true);
 
-    const q = query(collection(db, "legal"), orderBy("order", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pagesData = snapshot.docs.map(
-        (doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<LegalPage, "id" | "lastUpdated">),
-          lastUpdated: (doc.data().lastUpdated as Timestamp).toDate(),
-        })
-      );
-      setPages(pagesData);
-      setLoading(false);
+    const seedDatabase = async () => {
+        const legalCollectionRef = collection(db, "legal");
+        const snapshot = await getDocs(legalCollectionRef);
+        if (snapshot.empty) {
+            toast({ title: "Seeding Database", description: "Adding default legal pages..."});
+            const batch = writeBatch(db);
+            defaultLegalPages.forEach(page => {
+                const docRef = doc(legalCollectionRef);
+                batch.set(docRef, { ...page, lastUpdated: Timestamp.fromDate(new Date(page.lastUpdated)) });
+            });
+            await batch.commit();
+            toast({ title: "Seeding Complete", description: "Default legal pages have been added."});
+        }
+    }
+
+    seedDatabase().then(() => {
+        const q = query(collection(db, "legal"), orderBy("order", "asc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const pagesData = snapshot.docs.map(
+            (doc) => ({
+              id: doc.id,
+              ...(doc.data() as Omit<LegalPage, "id" | "lastUpdated">),
+              lastUpdated: (doc.data().lastUpdated as Timestamp).toDate(),
+            })
+          );
+          setPages(pagesData);
+          setLoading(false);
+        });
+        return unsubscribe;
+    }).catch(error => {
+        console.error("Error during seeding or fetching:", error);
+        toast({ variant: "destructive", title: "Initialization Failed", description: "Could not set up or fetch legal pages."});
+        setLoading(false);
     });
-    return () => unsubscribe();
-  }, [db]);
+
+  }, [db, toast]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const title = e.target.value;
