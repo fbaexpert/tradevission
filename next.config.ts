@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -6,6 +7,13 @@ const nextConfig: NextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  experimental: {
+    // This is required to allow the Next.js dev server to accept requests from the
+    // Firebase Studio preview URL.
+    allowedDevOrigins: [
+      'https://*.cloudworkstations.dev', // Allow any subdomain of cloudworkstations.dev
+    ],
   },
   images: {
     remotePatterns: [
