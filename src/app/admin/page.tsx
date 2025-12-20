@@ -472,20 +472,26 @@ export default function AdminUsersPage() {
       });
   }
 
-  const handleToggleWithdrawalVerification = (user: User) => {
+  const handleToggleWithdrawalVerification = async (user: User) => {
     if(!db) return;
     const currentStatus = user.withdrawalVerification?.required || false;
     const newRequiredStatus = !currentStatus;
-    const updatePayload = {
-      'withdrawalVerification.required': newRequiredStatus,
-      'withdrawalVerification.status': newRequiredStatus ? (user.withdrawalVerification?.status === 'verified' ? 'verified' : 'not_verified') : 'not_verified'
-    };
-    updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+    
+    try {
+        const userDocRef = doc(db, 'users', user.id);
+        const updatePayload = {
+            'withdrawalVerification.required': newRequiredStatus,
+            'withdrawalVerification.status': newRequiredStatus ? (user.withdrawalVerification?.status === 'verified' ? 'verified' : 'not_verified') : 'not_verified'
+        };
+        await updateDoc(userDocRef, updatePayload);
         toast({
             title: 'Security Updated',
             description: `Withdrawal verification for ${user.name} is now ${newRequiredStatus ? 'ENABLED' : 'DISABLED'}.`
         });
-    });
+    } catch (error) {
+        console.error("Error toggling verification", error);
+        toast({ variant: 'destructive', title: 'Update Failed' });
+    }
   };
 
   const handleResetVerification = (user: User) => {
@@ -496,12 +502,17 @@ export default function AdminUsersPage() {
       'withdrawalVerification.cooldownUntil': null,
       'withdrawalVerification.otp': null,
     };
-    updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+     try {
+        const userDocRef = doc(db, 'users', user.id);
+        updateDoc(userDocRef, updatePayload);
         toast({
             title: 'Verification Reset',
             description: `The verification status and attempts for ${user.name} have been reset.`
         });
-    });
+    } catch (error) {
+        console.error("Error resetting verification", error);
+        toast({ variant: 'destructive', title: 'Update Failed' });
+    }
   };
 
   const handleManualVerify = (user: User) => {
@@ -512,12 +523,17 @@ export default function AdminUsersPage() {
       'withdrawalVerification.cooldownUntil': null,
       'withdrawalVerification.otp': null,
     };
-     updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+      try {
+        const userDocRef = doc(db, 'users', user.id);
+        updateDoc(userDocRef, updatePayload);
         toast({
             title: 'User Verified',
             description: `${user.name} has been manually verified for withdrawals.`
         });
-    });
+    } catch (error) {
+        console.error("Error manually verifying", error);
+        toast({ variant: 'destructive', title: 'Update Failed' });
+    }
   }
 
   const handleBalanceUpdate = async () => {

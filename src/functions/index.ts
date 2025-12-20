@@ -225,6 +225,14 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
         customBadges: [],
         lastSpinTimestamp: null,
         lastWeeklyRewardPaidAt: null,
+        withdrawalVerification: {
+            required: false,
+            status: 'not_verified',
+            attempts: 0,
+            cooldownUntil: null,
+            otp: null,
+            otpExpiry: null
+        }
     });
 
     // 2. Reset CPM coins document
