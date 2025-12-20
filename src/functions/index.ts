@@ -1,11 +1,149 @@
-
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { createTransport } from 'nodemailer';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
+
+// Nodemailer transporter setup - REPLACE WITH YOUR EMAIL SERVICE DETAILS
+const transporter = createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+        user: "ummarfarooq38990@gmail.com", 
+        pass: "ccdciqzvtkcqbune",
+    },
+});
+
+/**
+ * A callable function that sends a 6-digit OTP to the user's email for withdrawal verification.
+ */
+export const sendWithdrawalOtp = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    const uid = context.auth.uid;
+    const userRef = admin.firestore().collection('users').doc(uid);
+
+    try {
+        const userDoc = await userRef.get();
+        if (!userDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'User not found.');
+        }
+        
+        const userData = userDoc.data();
+        if (!userData) {
+             throw new functions.https.HttpsError('not-found', 'User data is missing.');
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        await userRef.update({
+            'withdrawalVerification.otp': otp,
+            'withdrawalVerification.otpExpiry': admin.firestore.Timestamp.fromDate(otpExpiry),
+            'withdrawalVerification.status': 'pending_otp',
+        });
+        
+        // Send email using Nodemailer
+        await transporter.sendMail({
+            from: '"TradeVission Security" <no-reply@tradevission.online>',
+            to: userData.email,
+            subject: 'Your Withdrawal Verification Code',
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                    <h2>TradeVission Account Verification</h2>
+                    <p>Hello ${userData.name},</p>
+                    <p>A withdrawal attempt was initiated on your account. Please use the following verification code to proceed. If you did not initiate this, please secure your account immediately.</p>
+                    <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #000;">${otp}</p>
+                    <p>This code is valid for 10 minutes.</p>
+                    <p>Thank you,<br/>The TradeVission Team</p>
+                </div>
+            `,
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        functions.logger.error(`Error sending OTP for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'Failed to send OTP. Please try again.');
+    }
+});
+
+/**
+ * A callable function that verifies the provided OTP for withdrawal.
+ */
+export const verifyWithdrawalOtp = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    const uid = context.auth.uid;
+    const providedOtp = data.otp;
+
+    if (!providedOtp || typeof providedOtp !== 'string' || providedOtp.length !== 6) {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid 6-digit OTP must be provided.');
+    }
+
+    const userRef = admin.firestore().collection('users').doc(uid);
+
+    try {
+        return await admin.firestore().runTransaction(async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists) {
+                throw new functions.https.HttpsError('not-found', 'User not found.');
+            }
+
+            const verificationData = userDoc.data()?.withdrawalVerification || {};
+
+            if (verificationData.status === 'locked' && verificationData.cooldownUntil.toDate() > new Date()) {
+                throw new functions.https.HttpsError('failed-precondition', 'Account is locked. Please try again later.');
+            }
+
+            if (verificationData.otp !== providedOtp) {
+                const newAttempts = (verificationData.attempts || 0) + 1;
+                if (newAttempts >= 3) {
+                    const cooldownUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+                    transaction.update(userRef, {
+                        'withdrawalVerification.status': 'locked',
+                        'withdrawalVerification.attempts': newAttempts,
+                        'withdrawalVerification.cooldownUntil': admin.firestore.Timestamp.fromDate(cooldownUntil),
+                    });
+                     throw new functions.https.HttpsError('invalid-argument', 'Incorrect OTP. Your account is now locked for 24 hours.');
+                } else {
+                     transaction.update(userRef, { 'withdrawalVerification.attempts': newAttempts });
+                     throw new functions.https.HttpsError('invalid-argument', `Incorrect OTP. You have ${3 - newAttempts} attempts left.`);
+                }
+            }
+
+            if (verificationData.otpExpiry.toDate() < new Date()) {
+                transaction.update(userRef, {
+                    'withdrawalVerification.otp': null,
+                    'withdrawalVerification.otpExpiry': null,
+                });
+                throw new functions.https.HttpsError('deadline-exceeded', 'OTP has expired. Please request a new one.');
+            }
+            
+            // Success
+            transaction.update(userRef, {
+                'withdrawalVerification.status': 'verified',
+                'withdrawalVerification.attempts': 0,
+                'withdrawalVerification.otp': null,
+                'withdrawalVerification.otpExpiry': null,
+                'withdrawalVerification.cooldownUntil': null,
+            });
+
+            return { success: true, message: 'Account verified successfully.' };
+        });
+    } catch (error: any) {
+        functions.logger.error(`Error verifying OTP for user ${uid}:`, error.message);
+        throw error; // Re-throw the original error to be caught by the client
+    }
+});
+
 
 /**
  * A callable function that deletes a user account from Firebase Authentication and their main documents from Firestore.
