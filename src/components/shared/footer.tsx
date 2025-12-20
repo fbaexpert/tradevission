@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -15,7 +16,7 @@ interface FooterSettings {
     copyrightText: string;
 }
 
-interface LegalPage {
+interface DynamicLegalPage {
   id: string;
   title: string;
   slug: string;
@@ -36,7 +37,7 @@ export function Footer() {
       copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
   });
 
-  const [legalLinks, setLegalLinks] = useState<LegalPage[]>([]);
+  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
 
   useEffect(() => {
     if (!db) return;
@@ -52,8 +53,8 @@ export function Footer() {
 
     const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
     const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
-        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LegalPage));
-        setLegalLinks(links);
+        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
+        setDynamicLegalLinks(links);
     });
 
     return () => {
@@ -67,7 +68,7 @@ export function Footer() {
     setDialogOpen(true);
   }
 
-  const renderLink = (page: LegalPage) => {
+  const renderLink = (page: {slug: string, title: string}) => {
       if (isInDashboard) {
         return (
           <button onClick={() => handleLinkClick(page.slug as LegalPageType)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
@@ -86,6 +87,28 @@ export function Footer() {
     { label: 'About Us', href: '/#about'},
     { label: 'How It Works', href: '/#how-it-works'},
   ];
+
+  const staticLegalLinks = [
+    { title: 'Privacy Policy', slug: 'privacy-policy'},
+    { title: 'Terms & Conditions', slug: 'terms-and-conditions'},
+    { title: 'Refund Policy', slug: 'refund-policy'},
+    { title: 'Disclaimer', slug: 'disclaimer'},
+  ];
+
+  const staticPolicyLinks = [
+    { title: 'Earnings Disclaimer', slug: 'earnings-disclaimer'},
+    { title: 'Cookies Policy', slug: 'cookies-policy'},
+    { title: 'Risk Warning', slug: 'risk-warning'},
+    { title: 'Anti-Fraud Policy', slug: 'anti-fraud-policy'},
+    { title: 'Deposit Policy', slug: 'deposit-policy'},
+    { title: 'Withdrawal Policy', slug: 'withdrawal-policy'},
+    { title: 'Affiliate Terms', slug: 'affiliate-terms'},
+    { title: 'KYC Policy', slug: 'kyc-policy'},
+  ];
+
+  const allLegalLinks = [...staticLegalLinks, ...dynamicLegalLinks.filter(d => staticLegalLinks.every(s => s.slug !== d.slug))];
+  const allPolicyLinks = [...staticPolicyLinks, ...dynamicLegalLinks.filter(d => staticPolicyLinks.every(s => s.slug !== d.slug))];
+
 
   return (
     <>
@@ -113,8 +136,8 @@ export function Footer() {
                    <div>
                       <h4 className="font-bold text-white mb-4">Legal</h4>
                       <nav className="flex flex-col gap-2">
-                         {legalLinks.slice(0, 4).map(link => (
-                            <div key={link.id}>
+                         {allLegalLinks.slice(0, 4).map(link => (
+                            <div key={link.slug}>
                               {renderLink(link)}
                             </div>
                          ))}
@@ -123,8 +146,8 @@ export function Footer() {
                   <div>
                     <h4 className="font-bold text-white mb-4">Policies</h4>
                     <nav className="flex flex-col gap-2">
-                        {legalLinks.slice(4).map(link => (
-                            <div key={link.id}>
+                        {allPolicyLinks.map(link => (
+                            <div key={link.slug}>
                                {renderLink(link)}
                             </div>
                          ))}

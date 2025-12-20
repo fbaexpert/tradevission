@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState } from "react";
@@ -39,14 +40,20 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
     if (open && db && slug) {
       const fetchContent = async () => {
         setLoading(true);
-        const q = query(collection(db, "legal"), where("slug", "==", slug));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          setPageContent(snapshot.docs[0].data() as PageContent);
-        } else {
-          setPageContent(null);
+        try {
+            const q = query(collection(db, "legal"), where("slug", "==", slug));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                setPageContent(snapshot.docs[0].data() as PageContent);
+            } else {
+                setPageContent(null);
+            }
+        } catch(e) {
+            console.error(e);
+            setPageContent(null);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
       };
       fetchContent();
     }
@@ -81,7 +88,7 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
              <DialogHeader>
               <DialogTitle>Content Not Found</DialogTitle>
               <DialogDescription>
-                The content for this page could not be loaded.
+                The content for this page could not be loaded. Please try again later.
               </DialogDescription>
             </DialogHeader>
         )}
