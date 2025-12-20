@@ -252,9 +252,9 @@ export default function WithdrawPage() {
     else if (!hasActivePlan) disabledMessage = "You must have an active investment plan to withdraw.";
     else if (currentBalance === 0) disabledMessage = "Your balance is currently empty.";
     else if (isUserDisabled) disabledMessage = "Withdrawals for your account have been disabled by an admin.";
-    else if (!isGloballyDisabled) disabledMessage = "Withdrawals are currently disabled by the admin.";
+    else if (isGloballyDisabled) disabledMessage = "Withdrawals are currently disabled by the admin.";
     else if (!isWorkingDay) disabledMessage = `Withdrawals are closed today. Please try again on a working day.`;
-    else if (!isWithinTime) disabledMessage = `Withdrawals are only available between ${settings.startTime} and ${settings.endTime} (Server Time).`;
+    else if (!isWithinTime && settings) disabledMessage = `Withdrawals are only available between ${settings.startTime} and ${settings.endTime} (Server Time).`;
 
     return (
         <div className="p-4 sm:p-6 md:p-8">
