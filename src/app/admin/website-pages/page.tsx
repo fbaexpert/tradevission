@@ -15,8 +15,6 @@ import {
   Timestamp,
   query,
   orderBy,
-  getDocs,
-  writeBatch,
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -51,45 +49,45 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LoaderCircle, Scale, PlusCircle, Edit, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { LoaderCircle, FileText, PlusCircle, Edit, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { defaultLegalPages } from "@/lib/default-legal-content";
+import { Badge } from "@/components/ui/badge";
 
-const legalPageSchema = z.object({
+const pageCategories = ['Legal', 'Privacy', 'Terms', 'Policies', 'Help'] as const;
+
+const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   slug: z.string().min(3, "Slug is required.").regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens."),
   content: z.string().min(20, "Content must be at least 20 characters."),
-  lastUpdated: z.date(),
-  category: z.enum(['legal', 'policy']).default('policy'),
-  inFooter: z.boolean().default(true),
+  category: z.enum(pageCategories),
   order: z.coerce.number().default(0),
+  isActive: z.boolean().default(true),
 });
 
-type LegalPageFormData = z.infer<typeof legalPageSchema>;
+type PageFormData = z.infer<typeof pageSchema>;
 
-interface LegalPage extends LegalPageFormData {
+interface WebsitePage extends PageFormData {
   id: string;
+  createdAt: Timestamp;
 }
 
-export default function AdminLegalPage() {
+export default function AdminWebsitePages() {
   const { db } = useFirebase();
   const { toast } = useToast();
-  const [pages, setPages] = useState<LegalPage[]>([]);
+  const [pages, setPages] = useState<WebsitePage[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingPage, setEditingPage] = useState<LegalPage | null>(null);
+  const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
 
-  const form = useForm<LegalPageFormData>({
-    resolver: zodResolver(legalPageSchema),
+  const form = useForm<PageFormData>({
+    resolver: zodResolver(pageSchema),
     defaultValues: {
       title: "",
       slug: "",
       content: "",
-      lastUpdated: new Date(),
-      category: 'policy',
-      inFooter: true,
+      category: 'Policies',
       order: 0,
+      isActive: true,
     },
   });
 
@@ -97,39 +95,18 @@ export default function AdminLegalPage() {
     if (!db) return;
     setLoading(true);
 
-    const seedDatabase = async () => {
-        const legalCollectionRef = collection(db, "legal");
-        const snapshot = await getDocs(legalCollectionRef);
-        if (snapshot.empty) {
-            toast({ title: "Seeding Database", description: "Adding default legal pages..."});
-            const batch = writeBatch(db);
-            defaultLegalPages.forEach(page => {
-                const docRef = doc(legalCollectionRef);
-                batch.set(docRef, { ...page, lastUpdated: Timestamp.fromDate(new Date(page.lastUpdated)) });
-            });
-            await batch.commit();
-            toast({ title: "Seeding Complete", description: "Default legal pages have been added."});
-        }
-    }
-
-    const q = query(collection(db, "legal"), orderBy("order", "asc"));
+    const q = query(collection(db, "websitePages"), orderBy("order", "asc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const pagesData = snapshot.docs.map(
-        (doc) => ({
-            id: doc.id,
-            ...(doc.data() as Omit<LegalPage, "id" | "lastUpdated">),
-            lastUpdated: (doc.data().lastUpdated as Timestamp).toDate(),
-        })
+        (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
         );
         setPages(pagesData);
         setLoading(false);
     }, (error) => {
-        console.error("Error fetching legal pages:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch legal pages."});
+        console.error("Error fetching website pages:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch pages."});
         setLoading(false);
     });
-
-    seedDatabase();
 
     return () => unsubscribe();
   }, [db, toast]);
@@ -143,21 +120,16 @@ export default function AdminLegalPage() {
     }
   }
 
-  const onSubmit = async (data: LegalPageFormData) => {
+  const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
-    
-    const payload = {
-        ...data,
-        lastUpdated: Timestamp.fromDate(data.lastUpdated),
-    };
 
     try {
       if (editingPage) {
-        await updateDoc(doc(db, "legal", editingPage.id), payload);
+        await updateDoc(doc(db, "websitePages", editingPage.id), { ...data, updatedAt: Timestamp.now() });
         toast({ title: "Page Updated" });
       } else {
-        await addDoc(collection(db, "legal"), payload);
+        await addDoc(collection(db, "websitePages"), { ...data, createdAt: Timestamp.now() });
         toast({ title: "Page Created" });
       }
       handleCancelEdit();
@@ -168,7 +140,7 @@ export default function AdminLegalPage() {
     }
   };
 
-  const handleEdit = (page: LegalPage) => {
+  const handleEdit = (page: WebsitePage) => {
     setEditingPage(page);
     form.reset(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -180,17 +152,16 @@ export default function AdminLegalPage() {
       title: "",
       slug: "",
       content: "",
-      lastUpdated: new Date(),
-      category: 'policy',
-      inFooter: true,
+      category: 'Policies',
       order: 0,
+      isActive: true,
     });
   };
 
   const handleDelete = async (pageId: string) => {
     if (!db) return;
     try {
-      await deleteDoc(doc(db, "legal", pageId));
+      await deleteDoc(doc(db, "websitePages", pageId));
       toast({ title: "Page Deleted" });
     } catch (error) {
       toast({ variant: "destructive", title: "Deletion Failed" });
@@ -203,10 +174,10 @@ export default function AdminLegalPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white font-bold">
             {editingPage ? <Edit /> : <PlusCircle />}
-            {editingPage ? "Edit Legal Page" : "Create New Legal Page"}
+            {editingPage ? "Edit Website Page" : "Create New Website Page"}
           </CardTitle>
           <CardDescription>
-            Manage the legal and policy pages that appear in your website's footer.
+            Manage the content pages that appear in your website's footer.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -224,11 +195,11 @@ export default function AdminLegalPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="content">Content (Supports simple HTML tags)</Label>
+              <Label htmlFor="content">Content</Label>
               <Textarea id="content" {...form.register("content")} rows={10} />
               {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <div className="space-y-2">
                     <Label htmlFor="category">Category</Label>
                     <Controller
@@ -238,30 +209,27 @@ export default function AdminLegalPage() {
                             <Select onValueChange={field.onChange} value={field.value}>
                                 <SelectTrigger><SelectValue/></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="legal">Legal</SelectItem>
-                                    <SelectItem value="policy">Policy</SelectItem>
+                                    {pageCategories.map(cat => (
+                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         )}
                     />
                 </div>
                  <div className="space-y-2">
-                    <Label htmlFor="order">Footer Order</Label>
+                    <Label htmlFor="order">Display Order</Label>
                     <Input id="order" type="number" {...form.register("order")} />
-                </div>
-                 <div className="space-y-2">
-                    <Label htmlFor="lastUpdated">Last Updated</Label>
-                    <Input id="lastUpdated" type="date" value={format(form.watch("lastUpdated"), "yyyy-MM-dd")} onChange={(e) => form.setValue('lastUpdated', new Date(e.target.value))} />
                 </div>
                 <div className="flex items-center space-x-2 pt-8">
                      <Controller
-                        name="inFooter"
+                        name="isActive"
                         control={form.control}
                         render={({ field }) => (
-                            <Switch id="inFooter" checked={field.value} onCheckedChange={field.onChange} />
+                            <Switch id="isActive" checked={field.value} onCheckedChange={field.onChange} />
                         )}
                     />
-                    <Label htmlFor="inFooter">Show in Footer</Label>
+                    <Label htmlFor="isActive">Show in Footer</Label>
                 </div>
             </div>
             <div className="flex items-center gap-4">
@@ -276,6 +244,64 @@ export default function AdminLegalPage() {
               )}
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white font-bold"><FileText/> Existing Pages</CardTitle>
+            <CardDescription>A list of all created content pages.</CardDescription>
+        </CardHeader>
+        <CardContent>
+             {loading ? (
+                <div className="flex justify-center p-8"><LoaderCircle className="animate-spin"/></div>
+             ) : pages.length === 0 ? (
+                <p className="text-center text-muted-foreground p-8">No pages have been created yet.</p>
+             ) : (
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Title</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Order</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {pages.map(page => (
+                                <TableRow key={page.id}>
+                                    <TableCell className="font-medium">{page.title}</TableCell>
+                                    <TableCell><Badge variant="outline">{page.category}</Badge></TableCell>
+                                    <TableCell>{page.order}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={page.isActive ? "default" : "destructive"}>
+                                            {page.isActive ? "Active" : "Hidden"}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(page)}><Edit className="h-4 w-4"/></Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>This will permanently delete the "{page.title}" page.</AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDelete(page.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+             )}
         </CardContent>
       </Card>
     </div>

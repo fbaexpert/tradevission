@@ -125,10 +125,10 @@
       ]
     },
     {
-      "collectionGroup": "legal",
+      "collectionGroup": "websitePages",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "inFooter", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "order", "order": "ASCENDING" }
       ]
     }

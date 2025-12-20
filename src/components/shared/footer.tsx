@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo } from "react";
 import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, doc, onSnapshot, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 
 interface FooterSettings {
@@ -20,7 +20,7 @@ interface DynamicLegalPage {
   id: string;
   title: string;
   slug: string;
-  category: 'legal' | 'policy';
+  category: 'Legal' | 'Privacy' | 'Terms' | 'Policies' | 'Help';
   order: number;
 }
 
@@ -38,7 +38,7 @@ export function Footer() {
       copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
   });
 
-  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
+  const [dynamicPages, setDynamicPages] = useState<DynamicLegalPage[]>([]);
 
   useEffect(() => {
     if (!db) return;
@@ -52,26 +52,30 @@ export function Footer() {
         }
     });
 
-    const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
-    const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
-        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
-        setDynamicLegalLinks(links);
+    const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), orderBy("order", "asc"));
+    const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
+        const pages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
+        setDynamicPages(pages);
     }, (error) => {
-        console.error("Error fetching legal links for footer:", error);
+        console.error("Error fetching website pages for footer:", error);
     });
 
     return () => {
         unsubscribeSettings();
-        unsubscribeLegal();
+        unsubscribePages();
     };
   }, [db]);
 
-  const { legalLinks, policyLinks } = useMemo(() => {
-    const legal = dynamicLegalLinks.filter(l => l.category === 'legal');
-    const policy = dynamicLegalLinks.filter(l => l.category === 'policy');
-    return { legalLinks: legal, policyLinks: policy };
-  }, [dynamicLegalLinks]);
-
+  const groupedPages = useMemo(() => {
+    return dynamicPages.reduce((acc, page) => {
+        const category = page.category || 'Other';
+        if (!acc[category]) {
+            acc[category] = [];
+        }
+        acc[category].push(page);
+        return acc;
+    }, {} as Record<string, DynamicLegalPage[]>);
+  }, [dynamicPages]);
 
   const handleLinkClick = (slug: LegalPageType) => {
     setDialogContent(slug);
@@ -98,7 +102,6 @@ export function Footer() {
     { label: 'How It Works', href: '/#how-it-works'},
   ];
 
-
   return (
     <>
       <footer className="border-t border-border/20 py-12 px-6 bg-background">
@@ -122,26 +125,18 @@ export function Footer() {
                         ))}
                       </nav>
                   </div>
-                   <div>
-                      <h4 className="font-bold text-white mb-4">Legal</h4>
-                      <nav className="flex flex-col gap-2">
-                         {legalLinks.map(link => (
-                            <div key={link.id}>
-                              {renderLink(link)}
-                            </div>
-                         ))}
-                      </nav>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white mb-4">Policies</h4>
-                    <nav className="flex flex-col gap-2">
-                        {policyLinks.map(link => (
-                            <div key={link.id}>
-                               {renderLink(link)}
-                            </div>
-                         ))}
-                    </nav>
-                  </div>
+                  {Object.entries(groupedPages).map(([category, pages]) => (
+                    <div key={category}>
+                        <h4 className="font-bold text-white mb-4">{category}</h4>
+                        <nav className="flex flex-col gap-2">
+                            {pages.map(page => (
+                                <div key={page.id}>
+                                   {renderLink(page)}
+                                </div>
+                            ))}
+                        </nav>
+                    </div>
+                  ))}
               </div>
 
                <div>

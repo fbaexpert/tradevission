@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState } from 'react';
@@ -12,15 +13,16 @@ import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Timestamp } from 'firebase/firestore';
 
-interface LegalPage {
-  title: string;
-  content: string;
-  lastUpdated: Timestamp;
+interface PageContent {
+    title: string;
+    content: string;
+    lastUpdated?: Timestamp;
+    updatedAt?: Timestamp;
 }
 
 export default function LegalPage({ params }: { params: { slug: string } }) {
   const { db } = useFirebase();
-  const [pageContent, setPageContent] = useState<LegalPage | null>(null);
+  const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,13 +33,13 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
       setLoading(true);
       setError(null);
       try {
-        const q = query(collection(db, "legal"), where("slug", "==", params.slug));
+        const q = query(collection(db, "websitePages"), where("slug", "==", params.slug));
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
           setError("The page you are looking for does not exist.");
         } else {
-          const docData = querySnapshot.docs[0].data() as LegalPage;
+          const docData = querySnapshot.docs[0].data() as PageContent;
           setPageContent(docData);
         }
       } catch (err) {
@@ -50,6 +52,8 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
 
     fetchPage();
   }, [db, params.slug]);
+
+  const lastUpdated = pageContent?.updatedAt || pageContent?.lastUpdated;
 
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
@@ -88,9 +92,11 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
                 <Card className="border-border/20 shadow-lg shadow-primary/5">
                     <CardHeader>
                         <CardTitle className="text-3xl font-bold text-white">{pageContent.title}</CardTitle>
-                        <CardDescription>
-                            Last Updated: {format(pageContent.lastUpdated.toDate(), "PPP")}
-                        </CardDescription>
+                        {lastUpdated && (
+                            <CardDescription>
+                                Last Updated: {format(lastUpdated.toDate(), "PPP")}
+                            </CardDescription>
+                        )}
                     </CardHeader>
                     <CardContent>
                         <div

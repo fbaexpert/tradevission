@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -39,6 +40,7 @@ import {
   ShieldCheck,
   Trophy,
   Scale,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,7 +82,7 @@ const navItems = [
   { href: "/admin/notifications", icon: Bell, label: "Notifications" },
   { href: "/admin/airdrop", icon: Gift, label: "Airdrop" },
   { href: "/admin/activity-logs", icon: FileClock, label: "Activity Logs" },
-  { href: "/admin/legal", icon: Scale, label: "Legal Pages" },
+  { href: "/admin/website-pages", icon: FileText, label: "Website Pages" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 

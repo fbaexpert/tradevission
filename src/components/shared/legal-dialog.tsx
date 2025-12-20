@@ -17,12 +17,13 @@ import { collection, query, where, onSnapshot, Timestamp } from "firebase/firest
 import { LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
 
-export type LegalPage = 'privacy-policy' | 'terms-and-conditions' | 'refund-policy' | 'disclaimer' | 'earnings-disclaimer' | 'cookies-policy' | 'risk-warning' | 'anti-fraud-policy' | 'deposit-policy' | 'withdrawal-policy' | 'affiliate-terms' | 'kyc-policy' | string;
+export type LegalPage = string;
 
 interface PageContent {
     title: string;
     content: string;
-    lastUpdated: Timestamp;
+    lastUpdated?: Timestamp;
+    updatedAt?: Timestamp;
 }
 
 interface LegalDialogProps {
@@ -39,7 +40,7 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
   useEffect(() => {
     if (open && db && slug) {
       setLoading(true);
-      const q = query(collection(db, "legal"), where("slug", "==", slug));
+      const q = query(collection(db, "websitePages"), where("slug", "==", slug));
       
       const unsubscribe = onSnapshot(q, (snapshot) => {
           if (!snapshot.empty) {
@@ -58,6 +59,8 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
     }
   }, [open, db, slug]);
 
+  const lastUpdated = pageContent?.updatedAt || pageContent?.lastUpdated;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[625px]">
@@ -74,9 +77,11 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
           <>
             <DialogHeader>
               <DialogTitle>{pageContent.title}</DialogTitle>
-              <DialogDescription>
-                Last Updated: {format(pageContent.lastUpdated.toDate(), "PPP")}
-              </DialogDescription>
+              {lastUpdated && (
+                <DialogDescription>
+                  Last Updated: {format(lastUpdated.toDate(), "PPP")}
+                </DialogDescription>
+              )}
             </DialogHeader>
             <ScrollArea className="h-96 pr-6">
                 <div 
