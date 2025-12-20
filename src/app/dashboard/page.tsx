@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -66,6 +65,7 @@ interface UserPlan {
     planAmount: number;
     dailyReward: number;
     durationDays: number;
+    daysCompleted: number;
     startDate: Timestamp;
     lastClaimTimestamp?: Timestamp;
     status: 'active' | 'expired';
@@ -91,25 +91,17 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
     const [canWatchAd, setCanWatchAd] = useState(false);
 
     const { daysCompleted, daysLeft, progressValue } = useMemo(() => {
-        if (!plan.startDate) {
-            return { daysCompleted: 0, daysLeft: plan.durationDays, progressValue: 0 };
-        }
-        const now = new Date();
-        const start = plan.startDate.toDate();
-        const timeDiff = now.getTime() - start.getTime();
-        const completed = Math.floor(timeDiff / (1000 * 3600 * 24));
+        const completed = plan.daysCompleted || 0;
         const duration = plan.durationDays || 1;
-
-        const actualDaysCompleted = Math.max(0, Math.min(completed, duration));
-        const actualDaysLeft = Math.max(0, duration - actualDaysCompleted);
-        const progress = duration > 0 ? (actualDaysCompleted / duration) * 100 : 0;
+        const left = Math.max(0, duration - completed);
+        const progress = duration > 0 ? (completed / duration) * 100 : 0;
         
         return {
-            daysCompleted: actualDaysCompleted,
-            daysLeft: actualDaysLeft,
+            daysCompleted: completed,
+            daysLeft: left,
             progressValue: progress
         };
-    }, [plan.startDate, plan.durationDays]);
+    }, [plan.daysCompleted, plan.durationDays]);
     
     useEffect(() => {
         if (!plan) return;
@@ -172,7 +164,7 @@ const PlanCard = ({ plan }: { plan: UserPlan }) => {
               </div>
                <div>
                   <div className="flex justify-between items-center mb-1 text-xs text-muted-foreground">
-                      <span>Progress</span>
+                      <span>Progress ({daysCompleted}/{plan.durationDays})</span>
                       <span>{plan.durationDays} days total</span>
                   </div>
                   <Progress value={progressValue} className="h-2" />
@@ -204,6 +196,8 @@ const VipProgressCard = ({ tiers, totalDeposit }: { tiers: VipTier[], totalDepos
         let current: VipTier | null = null;
         let next: VipTier | null = null;
         let currentRank = "Member";
+
+        tiers.sort((a, b) => a.minDeposit - b.minDeposit);
 
         for (let i = 0; i < tiers.length; i++) {
             if (totalDeposit >= tiers[i].minDeposit) {
@@ -361,7 +355,6 @@ export default function Dashboard() {
         setCpmCoinData(doc.exists() ? doc.data() as CpmCoinData : null);
     });
 
-    // UPDATED: Simple query, sort in code.
     const vipTiersQuery = query(collection(db, "vipTiers"), where("isEnabled", "==", true));
     const unsubscribeVipTiers = onSnapshot(vipTiersQuery, (snapshot) => {
         const tiersData = snapshot.docs.map(doc => ({
@@ -369,10 +362,7 @@ export default function Dashboard() {
             ...doc.data(),
         } as Omit<VipTier, 'rank'>));
         
-        tiersData.sort((a, b) => a.minDeposit - b.minDeposit);
-        const rankedTiers = tiersData.map((tier, index) => ({ ...tier, rank: index + 1 }));
-
-        setVipTiers(rankedTiers);
+        setVipTiers(tiersData);
     });
 
 

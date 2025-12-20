@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -21,6 +20,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from "@/components/ui/card";
 import {
   Table,
@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Rocket, LoaderCircle, XCircle } from "lucide-react";
+import { Rocket, LoaderCircle, XCircle, Edit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,6 +46,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter as EditDialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 
 interface UserPlan {
@@ -57,6 +66,8 @@ interface UserPlan {
   startDate: Timestamp;
   endDate: Timestamp;
   status: 'active' | 'expired';
+  durationDays: number;
+  daysCompleted: number;
 }
 
 export default function AdminUserPlansPage() {
@@ -67,6 +78,10 @@ export default function AdminUserPlansPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
   const [isDeactivating, setIsDeactivating] = useState<string | null>(null);
+
+  const [editingPlan, setEditingPlan] = useState<UserPlan | null>(null);
+  const [newDaysLeft, setNewDaysLeft] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (!db || firebaseLoading) return;
@@ -86,16 +101,17 @@ export default function AdminUserPlansPage() {
       const plansData: UserPlan[] = [];
       querySnapshot.forEach(async (doc) => {
         const planData = { id: doc.id, ...doc.data() } as UserPlan;
-        const endDate = planData.endDate.toDate();
-        if (new Date() > endDate && planData.status !== 'expired') {
-          // This check is now primarily done on the user's dashboard,
-          // but we can keep it here as a fallback for the admin view.
-          await updateDoc(doc.ref, { status: 'expired' });
-          planData.status = 'expired';
+        
+        if (planData.endDate && planData.status !== 'expired') {
+            const endDate = planData.endDate.toDate();
+            if (new Date() > endDate) {
+              await updateDoc(doc.ref, { status: 'expired' });
+              planData.status = 'expired';
+            }
         }
         plansData.push(planData);
       });
-      setUserPlans(plansData.sort((a, b) => b.startDate.seconds - a.startDate.seconds));
+      setUserPlans(plansData.sort((a, b) => (b.startDate?.seconds ?? 0) - (a.startDate?.seconds ?? 0)));
       setLoading(false);
     });
 
@@ -146,12 +162,58 @@ export default function AdminUserPlansPage() {
     });
   }
 
+  const openEditDialog = (plan: UserPlan) => {
+    setEditingPlan(plan);
+    setNewDaysLeft(getDaysLeft(plan).toString());
+  };
+
+  const handleUpdateDuration = async () => {
+    if (!editingPlan || !newDaysLeft || !db) return;
+    const daysLeftNum = parseInt(newDaysLeft, 10);
+    if (isNaN(daysLeftNum) || daysLeftNum < 0 || daysLeftNum > editingPlan.durationDays) {
+        toast({
+            variant: "destructive",
+            title: "Invalid Input",
+            description: `Please enter a number between 0 and ${editingPlan.durationDays}.`,
+        });
+        return;
+    }
+    
+    setIsUpdating(true);
+    const newDaysCompleted = editingPlan.durationDays - daysLeftNum;
+    
+    if (!editingPlan.startDate) {
+        toast({ variant: "destructive", title: "Update Failed", description: "Plan start date is missing." });
+        setIsUpdating(false);
+        return;
+    }
+
+    const startDate = editingPlan.startDate.toDate();
+    const newEndDate = new Date(startDate);
+    newEndDate.setDate(startDate.getDate() + editingPlan.durationDays);
+
+    const userPlanRef = doc(db, "userPlans", editingPlan.id);
+    try {
+        await updateDoc(userPlanRef, {
+            daysCompleted: newDaysCompleted,
+            endDate: Timestamp.fromDate(newEndDate),
+            status: daysLeftNum === 0 ? 'expired' : 'active'
+        });
+        toast({
+            title: "Plan Updated",
+            description: `Duration for "${editingPlan.planName}" has been updated.`
+        });
+        setEditingPlan(null);
+        setNewDaysLeft("");
+    } catch(error) {
+         toast({ variant: "destructive", title: "Update Failed" });
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
   const getDaysLeft = (plan: UserPlan) => {
-    const now = new Date();
-    const end = plan.endDate.toDate();
-    if (end < now) return 0;
-    const diffTime = end.getTime() - now.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return plan.durationDays - (plan.daysCompleted || 0);
   };
   
   const filteredPlans = userPlans.filter(plan => {
@@ -212,20 +274,21 @@ export default function AdminUserPlansPage() {
                 {filteredPlans.map((plan) => {
                   const daysLeft = getDaysLeft(plan);
                   const status = plan.status === 'expired' || daysLeft <= 0 ? 'Expired' : 'Active';
+                  const user = users[plan.userId];
                   return (
                   <TableRow key={plan.id}>
                     <TableCell>
-                      <div className="font-medium break-all">{users[plan.userId]?.name || '...'}</div>
-                      <div className="text-sm text-foreground break-all">{users[plan.userId]?.email || '...'}</div>
+                      <div className="font-medium break-all">{user?.name || '...'}</div>
+                      <div className="text-sm text-foreground break-all">{user?.email || '...'}</div>
                     </TableCell>
                     <TableCell><Badge>{plan.planName}</Badge></TableCell>
                     <TableCell>${plan.planAmount.toFixed(2)}</TableCell>
                     <TableCell>${plan.dailyReward.toFixed(2)}</TableCell>
                     <TableCell>
-                      {plan.startDate.toDate().toLocaleDateString()}
+                      {plan.startDate ? plan.startDate.toDate().toLocaleDateString() : 'N/A'}
                     </TableCell>
                      <TableCell>
-                      {plan.endDate.toDate().toLocaleDateString()}
+                      {plan.endDate ? plan.endDate.toDate().toLocaleDateString() : 'N/A'}
                      </TableCell>
                      <TableCell>
                       {daysLeft}
@@ -236,31 +299,38 @@ export default function AdminUserPlansPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {status === 'Active' && (
-                        isDeactivating === plan.id ? 
-                        <LoaderCircle className="animate-spin ml-auto" /> :
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm">
-                               <XCircle className="mr-2 h-4 w-4"/> Deactivate
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will deactivate the plan "{plan.planName}" for {users[plan.userId]?.email}. The user will NOT be refunded. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeactivatePlan(plan)} className="bg-destructive hover:bg-destructive/90">
-                                Yes, Deactivate
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                      <div className="flex gap-2 justify-end">
+                        {status === 'Active' && (
+                           <Button variant="outline" size="sm" onClick={() => openEditDialog(plan)}>
+                               <Edit className="mr-2 h-4 w-4"/> Edit Duration
+                           </Button>
+                        )}
+                        {status === 'Active' && (
+                          isDeactivating === plan.id ? 
+                          <LoaderCircle className="animate-spin ml-auto" /> :
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm">
+                                <XCircle className="mr-2 h-4 w-4"/> Deactivate
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will deactivate the plan "{plan.planName}" for {user?.email}. The user will NOT be refunded. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeactivatePlan(plan)} className="bg-destructive hover:bg-destructive/90">
+                                  Yes, Deactivate
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                   )
@@ -275,6 +345,38 @@ export default function AdminUserPlansPage() {
           )}
         </CardContent>
       </Card>
+      
+      <Dialog open={!!editingPlan} onOpenChange={() => setEditingPlan(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Edit Plan Duration for {users[editingPlan?.userId || '']?.name}</DialogTitle>
+                <DialogDescription>
+                    Plan: "{editingPlan?.planName}" | Total Duration: {editingPlan?.durationDays} days
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <Label htmlFor="days-left">Days Left</Label>
+                <Input
+                    id="days-left"
+                    type="number"
+                    value={newDaysLeft}
+                    onChange={(e) => setNewDaysLeft(e.target.value)}
+                    placeholder="Enter the number of days remaining"
+                    disabled={isUpdating}
+                />
+                <p className="text-xs text-muted-foreground">
+                    Changing this value will adjust the user's plan progress. For example, if the total duration is 30 days and you set "Days Left" to 10, the user's progress will be updated to show 20 days completed.
+                </p>
+            </div>
+            <EditDialogFooter>
+                <Button variant="outline" onClick={() => setEditingPlan(null)} disabled={isUpdating}>Cancel</Button>
+                <Button onClick={handleUpdateDuration} disabled={isUpdating}>
+                    {isUpdating && <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>}
+                    Update Duration
+                </Button>
+            </EditDialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
