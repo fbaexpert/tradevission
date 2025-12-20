@@ -112,35 +112,26 @@ export default function AdminLegalPage() {
         }
     }
 
-    const setupListener = () => {
-        const q = query(collection(db, "legal"), orderBy("order", "asc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-          const pagesData = snapshot.docs.map(
-            (doc) => ({
-              id: doc.id,
-              ...(doc.data() as Omit<LegalPage, "id" | "lastUpdated">),
-              lastUpdated: (doc.data().lastUpdated as Timestamp).toDate(),
-            })
-          );
-          setPages(pagesData);
-          setLoading(false);
-        }, (error) => {
-            console.error("Error fetching legal pages:", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not fetch legal pages."});
-            setLoading(false);
-        });
-        return unsubscribe;
-    };
-    
-    seedDatabase().then(() => {
-        setupListener();
-    }).catch(error => {
-        console.error("Error during seeding:", error);
-        toast({ variant: "destructive", title: "Initialization Failed", description: "Could not set up legal pages."});
-        // Still try to set up listener in case seeding failed but data exists
-        setupListener();
+    const q = query(collection(db, "legal"), orderBy("order", "asc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const pagesData = snapshot.docs.map(
+        (doc) => ({
+            id: doc.id,
+            ...(doc.data() as Omit<LegalPage, "id" | "lastUpdated">),
+            lastUpdated: (doc.data().lastUpdated as Timestamp).toDate(),
+        })
+        );
+        setPages(pagesData);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching legal pages:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch legal pages."});
+        setLoading(false);
     });
 
+    seedDatabase();
+
+    return () => unsubscribe();
   }, [db, toast]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,6 +147,7 @@ export default function AdminLegalPage() {
     if (!db) return;
     setIsSubmitting(true);
     
+    // Correctly format the date for Firestore
     const payload = {
         ...data,
         lastUpdated: Timestamp.fromDate(data.lastUpdated),
