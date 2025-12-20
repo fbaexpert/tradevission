@@ -12,9 +12,10 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  Timestamp,
+  serverTimestamp,
   query,
   orderBy,
+  Timestamp
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -126,10 +127,12 @@ export default function AdminWebsitePages() {
 
     try {
       if (editingPage) {
-        await updateDoc(doc(db, "websitePages", editingPage.id), { ...data, updatedAt: Timestamp.now() });
+        await updateDoc(doc(db, "websitePages", editingPage.id), { ...data, updatedAt: serverTimestamp() });
         toast({ title: "Page Updated" });
       } else {
-        await addDoc(collection(db, "websitePages"), { ...data, createdAt: Timestamp.now() });
+        const docRef = await addDoc(collection(db, "websitePages"), { ...data, createdAt: serverTimestamp() });
+        console.log('Page created:', {category: data.category, title: data.title, id: docRef.id});
+        console.log('Firestore write result:', docRef.id);
         toast({ title: "Page Created" });
       }
       handleCancelEdit();

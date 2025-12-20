@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
+import { LegalDialog } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
 import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
@@ -30,7 +30,7 @@ export function Footer() {
   const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy-policy');
+  const [dialogContent, setDialogContent] = useState<string>('privacy-policy');
   
   const [footerSettings, setFooterSettings] = useState<FooterSettings>({
       description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
@@ -42,6 +42,9 @@ export function Footer() {
 
   useEffect(() => {
     if (!db) return;
+    
+    console.log('Footer loading, fetching pages...');
+    
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
         if(doc.exists()) {
@@ -53,9 +56,17 @@ export function Footer() {
     });
 
     const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), orderBy("order", "asc"));
+    console.log('Firestore query:', pagesQuery);
+    
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
-        const pages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
+        console.log('Pages received:', snapshot.docs.length);
+        const pages = snapshot.docs.map(doc => {
+          const pageData = { id: doc.id, ...doc.data() } as DynamicLegalPage;
+          console.log('Page:', pageData.title, 'Category:', pageData.category);
+          return pageData;
+        });
         setDynamicPages(pages);
+        console.log('Rendering pages:', pages.length);
     }, (error) => {
         console.error("Error fetching website pages for footer:", error);
     });
@@ -77,7 +88,7 @@ export function Footer() {
     }, {} as Record<string, DynamicLegalPage[]>);
   }, [dynamicPages]);
 
-  const handleLinkClick = (slug: LegalPageType) => {
+  const handleLinkClick = (slug: string) => {
     setDialogContent(slug);
     setDialogOpen(true);
   }
@@ -85,7 +96,7 @@ export function Footer() {
   const renderLink = (page: {slug: string, title: string}) => {
       if (isInDashboard) {
         return (
-          <button onClick={() => handleLinkClick(page.slug as LegalPageType)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
+          <button onClick={() => handleLinkClick(page.slug)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
             {page.title}
           </button>
         );
