@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -6,7 +7,7 @@ import { useFirebase } from "@/lib/firebase/provider";
 import { doc, collection, query, where, Timestamp, onSnapshot, orderBy, deleteDoc, writeBatch } from "firebase/firestore";
 import Link from "next/link";
 import Loader from "@/components/shared/loader";
-import { User, Mail, Calendar, AlertCircle, DollarSign, Tv, ArrowUpFromDot, Zap, CalendarDays, Rocket, Copy, Users2, ShieldCheck, Coins, Clock, Briefcase, UsersRound, Star, Trophy } from "lucide-react";
+import { User, Mail, Calendar, AlertCircle, DollarSign, Tv, ArrowUpFromDot, Zap, CalendarDays, Rocket, Copy, Users2, ShieldCheck, Coins, Clock, Briefcase, UsersRound, Star, Trophy, ShieldAlert } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -57,6 +58,10 @@ interface UserData {
   isCommander?: boolean;
   customBadges?: CustomBadge[];
   totalDeposit?: number; // Added for VIP progress
+  withdrawalVerification?: {
+    required: boolean;
+    status: 'not_verified' | 'pending_otp' | 'verified' | 'locked';
+  }
 }
 
 interface UserPlan {
@@ -443,6 +448,7 @@ export default function Dashboard() {
   const totalReferralBonus = userData.totalReferralBonus ?? 0;
   const totalTeamBonus = userData.totalTeamBonus ?? 0;
   const hasCpmCoins = cpmCoinData && cpmCoinData.amount > 0;
+  const needsVerification = userData.withdrawalVerification?.required && userData.withdrawalVerification.status !== 'verified';
   
   const getStatusVariant = (status: string) => {
     const s = status.toLowerCase();
@@ -483,6 +489,18 @@ export default function Dashboard() {
                     <AlertTitle>Error</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
+            )}
+            {needsVerification && (
+               <Alert variant="destructive" className="mb-6">
+                   <ShieldAlert className="h-4 w-4" />
+                   <AlertTitle>Action Required: Account Verification</AlertTitle>
+                   <AlertDescription>
+                       For added security, you must verify your account before you can make any withdrawals.
+                       <Button asChild size="sm" className="ml-4">
+                           <Link href="/dashboard/withdraw">Verify Now</Link>
+                       </Button>
+                   </AlertDescription>
+               </Alert>
             )}
             <Card className="overflow-hidden border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20">
                 <CardHeader className="p-4 sm:p-6">

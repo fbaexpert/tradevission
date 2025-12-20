@@ -73,7 +73,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal } from "lucide-react";
+import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -108,6 +108,12 @@ interface User {
   customBadges?: CustomBadge[];
   ipAddress?: string;
   deviceInfo?: string;
+  withdrawalVerification?: {
+    required: boolean;
+    status: 'not_verified' | 'pending_otp' | 'verified' | 'locked';
+    attempts: number;
+    cooldownUntil?: Timestamp;
+  };
 }
 
 interface TeamMember {
@@ -339,11 +345,24 @@ export default function AdminUsersPage() {
     setIsResetConfirmOpen(true);
   }
 
-  const updateUserStatus = async (userId: string, field: keyof User, value: any) => {
+  const updateUserStatus = async (userId: string, field: string, value: any) => {
     if (!db) return;
 
     const originalUsers = [...users];
-    setUsers(users.map(u => u.id === userId ? { ...u, [field]: value } : u));
+    const fieldParts = field.split('.');
+    setUsers(users.map(u => {
+        if (u.id === userId) {
+            let updatedUser = { ...u };
+            let currentLevel: any = updatedUser;
+            for (let i = 0; i < fieldParts.length - 1; i++) {
+                currentLevel[fieldParts[i]] = { ...(currentLevel[fieldParts[i]] || {}) };
+                currentLevel = currentLevel[fieldParts[i]];
+            }
+            currentLevel[fieldParts[fieldParts.length - 1]] = value;
+            return updatedUser;
+        }
+        return u;
+    }));
     
     try {
       const userDocRef = doc(db, 'users', userId);
@@ -451,6 +470,54 @@ export default function AdminUsersPage() {
         batch.commit();
         toast({ title: "Status Updated", description: `${user.name}'s team bonuses are now ${newStatus ? 'paused' : 'active'}.` });
       });
+  }
+
+  const handleToggleWithdrawalVerification = (user: User) => {
+    if(!db) return;
+    const currentStatus = user.withdrawalVerification?.required || false;
+    const newRequiredStatus = !currentStatus;
+    const updatePayload = {
+      'withdrawalVerification.required': newRequiredStatus,
+      'withdrawalVerification.status': newRequiredStatus ? (user.withdrawalVerification?.status === 'verified' ? 'verified' : 'not_verified') : 'not_verified'
+    };
+    updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+        toast({
+            title: 'Security Updated',
+            description: `Withdrawal verification for ${user.name} is now ${newRequiredStatus ? 'ENABLED' : 'DISABLED'}.`
+        });
+    });
+  };
+
+  const handleResetVerification = (user: User) => {
+    if(!db) return;
+    const updatePayload = {
+      'withdrawalVerification.status': 'not_verified',
+      'withdrawalVerification.attempts': 0,
+      'withdrawalVerification.cooldownUntil': null,
+      'withdrawalVerification.otp': null,
+    };
+    updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+        toast({
+            title: 'Verification Reset',
+            description: `The verification status and attempts for ${user.name} have been reset.`
+        });
+    });
+  };
+
+  const handleManualVerify = (user: User) => {
+    if(!db) return;
+    const updatePayload = {
+      'withdrawalVerification.status': 'verified',
+      'withdrawalVerification.attempts': 0,
+      'withdrawalVerification.cooldownUntil': null,
+      'withdrawalVerification.otp': null,
+    };
+     updateUserStatus(user.id, 'withdrawalVerification', { ...user.withdrawalVerification, ...updatePayload }).then(() => {
+        toast({
+            title: 'User Verified',
+            description: `${user.name} has been manually verified for withdrawals.`
+        });
+    });
   }
 
   const handleBalanceUpdate = async () => {
@@ -848,6 +915,18 @@ export default function AdminUsersPage() {
                                     {user.isCommander ? 'Revoke' : 'Grant'} Commander
                                 </Button>
                             </div>
+                            <div className="flex items-center gap-2 col-span-2">
+                               <Switch id={`otp-switch-${user.id}`} checked={user.withdrawalVerification?.required} onCheckedChange={() => handleToggleWithdrawalVerification(user)} />
+                                <Label htmlFor={`otp-switch-${user.id}`} className="text-xs flex items-center gap-1">
+                                    OTP Verification 
+                                    <Badge variant={
+                                        user.withdrawalVerification?.status === 'verified' ? 'default' :
+                                        user.withdrawalVerification?.status === 'locked' ? 'destructive' : 'secondary'
+                                    } className="capitalize text-xs px-1.5 py-0">
+                                      {user.withdrawalVerification?.status?.replace('_', ' ') || 'N/A'}
+                                    </Badge>
+                                </Label>
+                            </div>
                         </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -880,6 +959,13 @@ export default function AdminUsersPage() {
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => openNotificationsDialog(user)}>Notifications</DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => openTransactionsDialog(user)}>Transactions</DropdownMenuItem>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                 <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>Verification</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuItem onClick={() => handleManualVerify(user)}>Manual Verify</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleResetVerification(user)}>Reset Attempts/Lock</DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuItem onClick={() => openTeamDialog(user)}>View Team</DropdownMenuItem>

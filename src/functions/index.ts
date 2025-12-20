@@ -1,3 +1,4 @@
+
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { createTransport } from 'nodemailer';
@@ -99,7 +100,7 @@ export const verifyWithdrawalOtp = functions.https.onCall(async (data, context) 
 
             const verificationData = userDoc.data()?.withdrawalVerification || {};
 
-            if (verificationData.status === 'locked' && verificationData.cooldownUntil.toDate() > new Date()) {
+            if (verificationData.status === 'locked' && verificationData.cooldownUntil && verificationData.cooldownUntil.toDate() > new Date()) {
                 throw new functions.https.HttpsError('failed-precondition', 'Account is locked. Please try again later.');
             }
 
@@ -119,7 +120,7 @@ export const verifyWithdrawalOtp = functions.https.onCall(async (data, context) 
                 }
             }
 
-            if (verificationData.otpExpiry.toDate() < new Date()) {
+            if (!verificationData.otpExpiry || verificationData.otpExpiry.toDate() < new Date()) {
                 transaction.update(userRef, {
                     'withdrawalVerification.otp': null,
                     'withdrawalVerification.otpExpiry': null,
