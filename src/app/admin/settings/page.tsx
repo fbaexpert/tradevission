@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -706,7 +706,6 @@ export default function AdminSettingsPage() {
                 </CardContent>
             </Card>
             
-            {/* Emergency Reset Section */}
             <Card className="border-destructive/50 bg-destructive/10">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-destructive"><ShieldAlert/> Emergency Actions</CardTitle>
@@ -738,7 +737,6 @@ export default function AdminSettingsPage() {
                 </CardContent>
             </Card>
 
-            {/* Final Confirmation Dialog */}
             <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -781,7 +779,6 @@ export default function AdminSettingsPage() {
                 </DialogContent>
             </Dialog>
             
-            {/* Countdown Dialog */}
             <Dialog open={isCountdownActive}>
                 <DialogContent>
                     <DialogHeader>
