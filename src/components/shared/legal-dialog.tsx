@@ -63,9 +63,14 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[625px]">
         {loading ? (
-             <div className="flex justify-center items-center h-96">
-                <LoaderCircle className="animate-spin" />
-             </div>
+            <>
+                <DialogHeader>
+                    <DialogTitle>Loading...</DialogTitle>
+                </DialogHeader>
+                <div className="flex justify-center items-center h-96">
+                    <LoaderCircle className="animate-spin" />
+                </div>
+            </>
         ) : pageContent ? (
           <>
             <DialogHeader>
