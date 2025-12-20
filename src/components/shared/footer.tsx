@@ -120,7 +120,7 @@ export function Footer() {
                       <h4 className="font-bold text-white mb-4">Legal</h4>
                       <nav className="flex flex-col gap-2">
                          {legalLinks.map(link => (
-                            <div key={link.slug}>
+                            <div key={link.id}>
                               {renderLink(link)}
                             </div>
                          ))}
@@ -130,7 +130,7 @@ export function Footer() {
                     <h4 className="font-bold text-white mb-4">Policies</h4>
                     <nav className="flex flex-col gap-2">
                         {policyLinks.map(link => (
-                            <div key={link.slug}>
+                            <div key={link.id}>
                                {renderLink(link)}
                             </div>
                          ))}
