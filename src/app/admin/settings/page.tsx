@@ -401,408 +401,407 @@ export default function AdminSettingsPage() {
 
     return (
         <>
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white font-bold"><Settings/>Global Settings</CardTitle>
-                <CardDescription>Manage site-wide settings for all users.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                        <Label htmlFor="maintenance-mode" className="text-base">Website Paused</Label>
-                        <p className="text-sm text-muted-foreground">
-                            When enabled, only admins can log in. All other users will see a maintenance page.
-                        </p>
-                    </div>
-                    <Switch
-                        id="maintenance-mode"
-                        checked={settings.maintenanceMode}
-                        onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, maintenanceMode: checked }) : null)}
-                    />
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                        <Label htmlFor="simulated-activity" className="text-base">Simulated Activity Feed</Label>
-                        <p className="text-sm text-muted-foreground">
-                           Show a simulated feed of deposits and withdrawals to users.
-                        </p>
-                    </div>
-                    <Switch
-                        id="simulated-activity"
-                        checked={settings.simulatedActivityFeed}
-                        onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, simulatedActivityFeed: checked }) : null)}
-                    />
-                </div>
-
-                 <div className="space-y-2">
-                    <Label htmlFor="support-email">Support Email</Label>
-                    <Input
-                        id="support-email"
-                        type="email"
-                        value={settings.supportEmail}
-                        onChange={(e) => setSettings(s => s ? ({ ...s, supportEmail: e.target.value }) : null)}
-                        placeholder="e.g., support@example.com"
-                    />
-                     <p className="text-sm text-muted-foreground">
-                        This email will be displayed to users for support inquiries.
-                     </p>
-                </div>
-
-                 {/* Deposit Boost Event Settings */}
-                <div className="space-y-4 rounded-lg border border-primary/50 bg-primary/10 p-4">
-                    <div className="flex items-center justify-between">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-white font-bold"><Settings/>Global Settings</CardTitle>
+                    <CardDescription>Manage site-wide settings for all users.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
-                            <Label className="text-base flex items-center gap-2 text-primary"><Zap /> Deposit Boost Event</Label>
-                            <p className="text-sm text-primary/80">
-                                Temporarily boost all user deposits with a percentage bonus.
+                            <Label htmlFor="maintenance-mode" className="text-base">Website Paused</Label>
+                            <p className="text-sm text-muted-foreground">
+                                When enabled, only admins can log in. All other users will see a maintenance page.
                             </p>
                         </div>
                         <Switch
-                            id="deposit-boost-enabled"
-                            checked={settings.depositBoost?.enabled}
-                            onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, enabled: checked} }) : null)}
+                            id="maintenance-mode"
+                            checked={settings.maintenanceMode}
+                            onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, maintenanceMode: checked }) : null)}
                         />
                     </div>
-                    {settings.depositBoost?.enabled && (
-                        <div className="space-y-4 pt-4 border-t border-primary/20">
-                             <div className="grid md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="deposit-boost-title">Event Title</Label>
-                                    <Input
-                                        id="deposit-boost-title"
-                                        value={settings.depositBoost.title}
-                                        onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, title: e.target.value} }) : null)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="deposit-boost-bonus">Bonus Percentage (%)</Label>
-                                    <Input
-                                        id="deposit-boost-bonus"
-                                        type="number"
-                                        value={settings.depositBoost.bonusPercentage}
-                                        onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, bonusPercentage: Number(e.target.value)} }) : null)}
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="deposit-boost-description">Event Description</Label>
-                                <Textarea
-                                    id="deposit-boost-description"
-                                    value={settings.depositBoost.description}
-                                    onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, description: e.target.value} }) : null)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>End Date & Time</Label>
-                                <div className="flex gap-2">
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant={"outline"}
-                                                className={cn("w-full justify-start text-left font-normal", !settings.depositBoost.endTime && "text-muted-foreground")}
-                                            >
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {settings.depositBoost.endTime ? format(new Date(settings.depositBoost.endTime), "PPP") : <span>Pick a date</span>}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            <Calendar
-                                                mode="single"
-                                                selected={settings.depositBoost.endTime ? new Date(settings.depositBoost.endTime) : undefined}
-                                                onSelect={(date) => handleOfferDateTimeChange('endTime', date?.toISOString() || '', 'date')}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
-                                    <Input
-                                        type="time"
-                                        value={format(new Date(settings.depositBoost.endTime), 'HH:mm')}
-                                        onChange={(e) => handleOfferDateTimeChange('endTime', e.target.value, 'time')}
-                                        className="w-[120px]"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
 
-                {/* Plan Tags Settings */}
-                <div className="space-y-4 rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                         <div className="space-y-0.5">
-                            <Label className="text-base flex items-center gap-2"><Tag /> Manage Plan Tags</Label>
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="simulated-activity" className="text-base">Simulated Activity Feed</Label>
                             <p className="text-sm text-muted-foreground">
-                                Create and manage custom tags for investment plans.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="space-y-4">
-                        {(settings.planTags || []).map((tag, index) => (
-                             <div key={tag.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
-                                <Input 
-                                    type="text" 
-                                    placeholder="Tag Name" 
-                                    value={tag.name}
-                                    onChange={(e) => handlePlanTagChange(index, 'name', e.target.value)}
-                                    className="w-40"
-                                />
-                                <div className="flex items-center gap-2 h-10 border border-input rounded-md bg-background px-3">
-                                    <Palette className="h-4 w-4 text-muted-foreground"/>
-                                    <Input
-                                        id="badge-color"
-                                        type="color"
-                                        value={tag.color}
-                                        onChange={(e) => handlePlanTagChange(index, 'color', e.target.value)}
-                                        className="p-0 border-0 h-8 w-8 bg-transparent"
-                                    />
-                                </div>
-                                <Button variant="destructive" size="icon" onClick={() => removePlanTag(index)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                             </div>
-                        ))}
-                        <Button variant="outline" onClick={addPlanTag}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add Plan Tag
-                        </Button>
-                    </div>
-                </div>
-                 
-                {/* Withdrawal Settings */}
-                <div className="space-y-4 rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                         <div className="space-y-0.5">
-                            <Label htmlFor="withdrawal-open" className="text-base">Withdrawals Enabled</Label>
-                            <p className="text-sm text-muted-foreground">
-                                Globally enable or disable all user withdrawals.
+                            Show a simulated feed of deposits and withdrawals to users.
                             </p>
                         </div>
                         <Switch
-                            id="withdrawal-open"
-                            checked={settings.withdrawal.open}
-                            onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, open: checked} }) : null)}
+                            id="simulated-activity"
+                            checked={settings.simulatedActivityFeed}
+                            onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, simulatedActivityFeed: checked }) : null)}
                         />
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Withdrawal Active Time (Server Time)</Label>
-                        <div className="flex items-center gap-4">
-                            <Input
-                                type="time"
-                                value={settings.withdrawal.startTime}
-                                onChange={(e) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, startTime: e.target.value} }) : null)}
-                            />
-                             <span>to</span>
-                            <Input
-                                type="time"
-                                value={settings.withdrawal.endTime}
-                                onChange={(e) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, endTime: e.target.value} }) : null)}
+                        <Label htmlFor="support-email">Support Email</Label>
+                        <Input
+                            id="support-email"
+                            type="email"
+                            value={settings.supportEmail}
+                            onChange={(e) => setSettings(s => s ? ({ ...s, supportEmail: e.target.value }) : null)}
+                            placeholder="e.g., support@example.com"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                            This email will be displayed to users for support inquiries.
+                        </p>
+                    </div>
+
+                    {/* Deposit Boost Event Settings */}
+                    <div className="space-y-4 rounded-lg border border-primary/50 bg-primary/10 p-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base flex items-center gap-2 text-primary"><Zap /> Deposit Boost Event</Label>
+                                <p className="text-sm text-primary/80">
+                                    Temporarily boost all user deposits with a percentage bonus.
+                                </p>
+                            </div>
+                            <Switch
+                                id="deposit-boost-enabled"
+                                checked={settings.depositBoost?.enabled}
+                                onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, enabled: checked} }) : null)}
                             />
                         </div>
-                    </div>
-                     <div className="space-y-2">
-                        <Label>Withdrawal Off Days</Label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {ALL_DAYS.map(day => (
-                                <div key={day} className="flex items-center gap-2">
-                                     <Checkbox
-                                        id={`day-${day}`}
-                                        checked={settings.withdrawal.offDays.includes(day)}
-                                        onCheckedChange={(checked) => handleWithdrawalDayToggle(day, !!checked)}
+                        {settings.depositBoost?.enabled && (
+                            <div className="space-y-4 pt-4 border-t border-primary/20">
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="deposit-boost-title">Event Title</Label>
+                                        <Input
+                                            id="deposit-boost-title"
+                                            value={settings.depositBoost.title}
+                                            onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, title: e.target.value} }) : null)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="deposit-boost-bonus">Bonus Percentage (%)</Label>
+                                        <Input
+                                            id="deposit-boost-bonus"
+                                            type="number"
+                                            value={settings.depositBoost.bonusPercentage}
+                                            onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, bonusPercentage: Number(e.target.value)} }) : null)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="deposit-boost-description">Event Description</Label>
+                                    <Textarea
+                                        id="deposit-boost-description"
+                                        value={settings.depositBoost.description}
+                                        onChange={(e) => setSettings(s => s ? ({ ...s, depositBoost: {...s.depositBoost!, description: e.target.value} }) : null)}
                                     />
-                                    <Label htmlFor={`day-${day}`} className="font-normal">{day}</Label>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>End Date & Time</Label>
+                                    <div className="flex gap-2">
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn("w-full justify-start text-left font-normal", !settings.depositBoost.endTime && "text-muted-foreground")}
+                                                >
+                                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                                    {settings.depositBoost.endTime ? format(new Date(settings.depositBoost.endTime), "PPP") : <span>Pick a date</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={settings.depositBoost.endTime ? new Date(settings.depositBoost.endTime) : undefined}
+                                                    onSelect={(date) => handleOfferDateTimeChange('endTime', date?.toISOString() || '', 'date')}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <Input
+                                            type="time"
+                                            value={format(new Date(settings.depositBoost.endTime), 'HH:mm')}
+                                            onChange={(e) => handleOfferDateTimeChange('endTime', e.target.value, 'time')}
+                                            className="w-[120px]"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Plan Tags Settings */}
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base flex items-center gap-2"><Tag /> Manage Plan Tags</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Create and manage custom tags for investment plans.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            {(settings.planTags || []).map((tag, index) => (
+                                <div key={tag.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
+                                    <Input 
+                                        type="text" 
+                                        placeholder="Tag Name" 
+                                        value={tag.name}
+                                        onChange={(e) => handlePlanTagChange(index, 'name', e.target.value)}
+                                        className="w-40"
+                                    />
+                                    <div className="flex items-center gap-2 h-10 border border-input rounded-md bg-background px-3">
+                                        <Palette className="h-4 w-4 text-muted-foreground"/>
+                                        <Input
+                                            id="badge-color"
+                                            type="color"
+                                            value={tag.color}
+                                            onChange={(e) => handlePlanTagChange(index, 'color', e.target.value)}
+                                            className="p-0 border-0 h-8 w-8 bg-transparent"
+                                        />
+                                    </div>
+                                    <Button variant="destructive" size="icon" onClick={() => removePlanTag(index)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
                                 </div>
                             ))}
+                            <Button variant="outline" onClick={addPlanTag}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Plan Tag
+                            </Button>
                         </div>
                     </div>
-                </div>
+                    
+                    {/* Withdrawal Settings */}
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="withdrawal-open" className="text-base">Withdrawals Enabled</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Globally enable or disable all user withdrawals.
+                                </p>
+                            </div>
+                            <Switch
+                                id="withdrawal-open"
+                                checked={settings.withdrawal.open}
+                                onCheckedChange={(checked) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, open: checked} }) : null)}
+                            />
+                        </div>
 
-                {/* Commander Program Settings */}
-                <div className="space-y-4 rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                        <Label className="text-base flex items-center gap-2"><Star /> Commander Program</Label>
-                        <p className="text-sm text-muted-foreground">
-                            Configure the rewards and requirements for the Commander rank.
-                        </p>
-                    </div>
-                    <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
                         <div className="space-y-2">
-                            <Label htmlFor="commander-referrals">Referral Requirement</Label>
-                            <Input
-                                id="commander-referrals"
-                                type="number"
-                                value={settings.commander.referralRequirement}
-                                onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, referralRequirement: Number(e.target.value)} }) : null)}
-                            />
+                            <Label>Withdrawal Active Time (Server Time)</Label>
+                            <div className="flex items-center gap-4">
+                                <Input
+                                    type="time"
+                                    value={settings.withdrawal.startTime}
+                                    onChange={(e) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, startTime: e.target.value} }) : null)}
+                                />
+                                <span>to</span>
+                                <Input
+                                    type="time"
+                                    value={settings.withdrawal.endTime}
+                                    onChange={(e) => setSettings(s => s ? ({ ...s, withdrawal: {...s.withdrawal, endTime: e.target.value} }) : null)}
+                                />
+                            </div>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="commander-salary">Weekly Salary (Points)</Label>
-                            <Input
-                                id="commander-salary"
-                                type="number"
-                                value={settings.commander.weeklySalary}
-                                onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, weeklySalary: Number(e.target.value)} }) : null)}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="commander-coins">Weekly CPM Coins</Label>
-                            <Input
-                                id="commander-coins"
-                                type="number"
-                                value={settings.commander.weeklyCpmCoins}
-                                onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, weeklyCpmCoins: Number(e.target.value)} }) : null)}
-                            />
+                            <Label>Withdrawal Off Days</Label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {ALL_DAYS.map(day => (
+                                    <div key={day} className="flex items-center gap-2">
+                                        <Checkbox
+                                            id={`day-${day}`}
+                                            checked={settings.withdrawal.offDays.includes(day)}
+                                            onCheckedChange={(checked) => handleWithdrawalDayToggle(day, !!checked)}
+                                        />
+                                        <Label htmlFor={`day-${day}`} className="font-normal">{day}</Label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Super Bonus Settings */}
-                 <div className="space-y-4 rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                         <div className="space-y-0.5">
-                            <Label className="text-base flex items-center gap-2"><Gift /> Super Bonus Settings</Label>
+                    {/* Commander Program Settings */}
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label className="text-base flex items-center gap-2"><Star /> Commander Program</Label>
                             <p className="text-sm text-muted-foreground">
-                                Reward users for reaching referral milestones.
+                                Configure the rewards and requirements for the Commander rank.
                             </p>
                         </div>
+                        <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
+                            <div className="space-y-2">
+                                <Label htmlFor="commander-referrals">Referral Requirement</Label>
+                                <Input
+                                    id="commander-referrals"
+                                    type="number"
+                                    value={settings.commander.referralRequirement}
+                                    onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, referralRequirement: Number(e.target.value)} }) : null)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="commander-salary">Weekly Salary (Points)</Label>
+                                <Input
+                                    id="commander-salary"
+                                    type="number"
+                                    value={settings.commander.weeklySalary}
+                                    onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, weeklySalary: Number(e.target.value)} }) : null)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="commander-coins">Weekly CPM Coins</Label>
+                                <Input
+                                    id="commander-coins"
+                                    type="number"
+                                    value={settings.commander.weeklyCpmCoins}
+                                    onChange={(e) => setSettings(s => s ? ({ ...s, commander: {...s.commander, weeklyCpmCoins: Number(e.target.value)} }) : null)}
+                                />
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="space-y-4">
-                        {(settings.superBonusTiers || []).map((tier, index) => (
-                             <div key={index} className="flex items-center gap-4 p-2 rounded-md bg-muted/30">
-                                <Label>Tier {index + 1}</Label>
-                                <Input 
-                                    type="number" 
-                                    placeholder="Referrals" 
-                                    value={tier.referrals}
-                                    onChange={(e) => handleBonusTierChange(index, 'referrals', e.target.value)}
-                                    className="w-32"
-                                />
-                                <Input 
-                                    type="number" 
-                                    placeholder="Bonus (Points)" 
-                                    value={tier.bonus}
-                                    onChange={(e) => handleBonusTierChange(index, 'bonus', e.target.value)}
-                                    className="w-32"
-                                />
-                                <Button variant="destructive" size="icon" onClick={() => removeBonusTier(index)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                             </div>
-                        ))}
+                    {/* Super Bonus Settings */}
+                    <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base flex items-center gap-2"><Gift /> Super Bonus Settings</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Reward users for reaching referral milestones.
+                                </p>
+                            </div>
+                        </div>
 
-                        <Button variant="outline" onClick={addBonusTier}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add Tier
-                        </Button>
+                        <div className="space-y-4">
+                            {(settings.superBonusTiers || []).map((tier, index) => (
+                                <div key={index} className="flex items-center gap-4 p-2 rounded-md bg-muted/30">
+                                    <Label>Tier {index + 1}</Label>
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Referrals" 
+                                        value={tier.referrals}
+                                        onChange={(e) => handleBonusTierChange(index, 'referrals', e.target.value)}
+                                        className="w-32"
+                                    />
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Bonus (Points)" 
+                                        value={tier.bonus}
+                                        onChange={(e) => handleBonusTierChange(index, 'bonus', e.target.value)}
+                                        className="w-32"
+                                    />
+                                    <Button variant="destructive" size="icon" onClick={() => removeBonusTier(index)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ))}
+
+                            <Button variant="outline" onClick={addBonusTier}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Tier
+                            </Button>
+                        </div>
                     </div>
-                </div>
 
-                <Button onClick={handleSave} disabled={saving}>
-                    {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>}
-                    Save Changes
-                </Button>
-            </CardContent>
-        </Card>
-        
-        {/* Emergency Reset Section */}
-        <Card className="border-destructive/50 bg-destructive/10">
-             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-destructive"><ShieldAlert/> Emergency Actions</CardTitle>
-                <CardDescription className="text-destructive/80">
-                   Use these actions only in critical situations. These actions are irreversible.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive">
-                           Emergency System Reset
+                    <Button onClick={handleSave} disabled={saving}>
+                        {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>}
+                        Save Changes
+                    </Button>
+                </CardContent>
+            </Card>
+            
+            {/* Emergency Reset Section */}
+            <Card className="border-destructive/50 bg-destructive/10">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-destructive"><ShieldAlert/> Emergency Actions</CardTitle>
+                    <CardDescription className="text-destructive/80">
+                    Use these actions only in critical situations. These actions are irreversible.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive">
+                            Emergency System Reset
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>ARE YOU ABSOLUTELY SURE?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This is an irreversible action that will delete most user-generated data from the database, including user plans, deposits, withdrawals, tickets, and logs.
+                                    <strong className="block mt-2">This CANNOT be undone.</strong>
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => setIsResetConfirmOpen(true)} className="bg-destructive hover:bg-destructive/90">I Understand, Continue</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </CardContent>
+            </Card>
+
+            {/* Final Confirmation Dialog */}
+            <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Final Confirmation: System Reset</DialogTitle>
+                        <DialogDescription>
+                            To proceed, please type 'RESET' and enter your admin password. The reset will begin after a 60-second countdown.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="reset-confirm-text">Type "RESET" to confirm</Label>
+                            <Input 
+                                id="reset-confirm-text" 
+                                value={resetTypedConfirm}
+                                onChange={(e) => setResetTypedConfirm(e.target.value)}
+                                placeholder="RESET"
+                                className="font-mono tracking-widest"
+                                disabled={isResetting}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="reset-password">Your Admin Password</Label>
+                            <Input 
+                                id="reset-password" 
+                                type="password"
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="••••••••"
+                                disabled={isResetting}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsResetConfirmOpen(false)} disabled={isResetting}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleStartResetCountdown} disabled={isResetting || !resetPassword || resetTypedConfirm !== 'RESET'}>
+                            {isResetting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                            Initiate Reset
                         </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>ARE YOU ABSOLUTELY SURE?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This is an irreversible action that will delete most user-generated data from the database, including user plans, deposits, withdrawals, tickets, and logs.
-                                <strong className="block mt-2">This CANNOT be undone.</strong>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => setIsResetConfirmOpen(true)} className="bg-destructive hover:bg-destructive/90">I Understand, Continue</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </CardContent>
-        </Card>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            
+            {/* Countdown Dialog */}
+            <Dialog open={isCountdownActive}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-destructive text-center">SYSTEM RESET IN PROGRESS</DialogTitle>
+                        <DialogDescription className="text-center">
+                            All specified collections will be deleted in...
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-center items-center py-8">
+                        <div className="text-8xl font-mono font-bold text-destructive">
+                            {countdown}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="secondary" className="w-full" onClick={cancelCountdown}>
+                            CANCEL RESET
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
-        
-        {/* Final Confirmation Dialog */}
-        <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Final Confirmation: System Reset</DialogTitle>
-                    <DialogDescription>
-                        To proceed, please type 'RESET' and enter your admin password. The reset will begin after a 60-second countdown.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="reset-confirm-text">Type "RESET" to confirm</Label>
-                        <Input 
-                            id="reset-confirm-text" 
-                            value={resetTypedConfirm}
-                            onChange={(e) => setResetTypedConfirm(e.target.value)}
-                            placeholder="RESET"
-                            className="font-mono tracking-widest"
-                            disabled={isResetting}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="reset-password">Your Admin Password</Label>
-                        <Input 
-                            id="reset-password" 
-                            type="password"
-                            value={resetPassword}
-                            onChange={(e) => setResetPassword(e.target.value)}
-                            placeholder="••••••••"
-                            disabled={isResetting}
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsResetConfirmOpen(false)} disabled={isResetting}>Cancel</Button>
-                    <Button variant="destructive" onClick={handleStartResetCountdown} disabled={isResetting || !resetPassword || resetTypedConfirm !== 'RESET'}>
-                        {isResetting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-                        Initiate Reset
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-        
-        {/* Countdown Dialog */}
-         <Dialog open={isCountdownActive}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle className="text-destructive text-center">SYSTEM RESET IN PROGRESS</DialogTitle>
-                    <DialogDescription className="text-center">
-                        All specified collections will be deleted in...
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex justify-center items-center py-8">
-                    <div className="text-8xl font-mono font-bold text-destructive">
-                        {countdown}
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="secondary" className="w-full" onClick={cancelCountdown}>
-                        CANCEL RESET
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }
-
