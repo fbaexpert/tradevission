@@ -13,7 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { useFirebase } from "@/lib/firebase/provider";
-import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, Timestamp } from "firebase/firestore";
 import { LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
 
@@ -38,24 +38,23 @@ export function LegalDialog({ open, onOpenChange, content: slug }: LegalDialogPr
 
   useEffect(() => {
     if (open && db && slug) {
-      const fetchContent = async () => {
-        setLoading(true);
-        try {
-            const q = query(collection(db, "legal"), where("slug", "==", slug));
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                setPageContent(snapshot.docs[0].data() as PageContent);
-            } else {
-                setPageContent(null);
-            }
-        } catch(e) {
-            console.error(e);
-            setPageContent(null);
-        } finally {
-            setLoading(false);
-        }
-      };
-      fetchContent();
+      setLoading(true);
+      const q = query(collection(db, "legal"), where("slug", "==", slug));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+          if (!snapshot.empty) {
+              setPageContent(snapshot.docs[0].data() as PageContent);
+          } else {
+              setPageContent(null);
+          }
+          setLoading(false);
+      }, (error) => {
+          console.error("Error fetching legal content:", error);
+          setPageContent(null);
+          setLoading(false);
+      });
+
+      return () => unsubscribe();
     }
   }, [open, db, slug]);
 

@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
@@ -38,7 +38,8 @@ export function Footer() {
       copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
   });
 
-  const [dynamicLegalLinks, setDynamicLegalLinks] = useState<DynamicLegalPage[]>([]);
+  const [legalLinks, setLegalLinks] = useState<DynamicLegalPage[]>([]);
+  const [policyLinks, setPolicyLinks] = useState<DynamicLegalPage[]>([]);
 
   useEffect(() => {
     if (!db) return;
@@ -55,7 +56,8 @@ export function Footer() {
     const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
     const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
         const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
-        setDynamicLegalLinks(links);
+        setLegalLinks(links.filter(l => l.category === 'legal'));
+        setPolicyLinks(links.filter(l => l.category === 'policy'));
     });
 
     return () => {
@@ -88,19 +90,6 @@ export function Footer() {
     { label: 'About Us', href: '/#about'},
     { label: 'How It Works', href: '/#how-it-works'},
   ];
-
-  const { legalLinks, policyLinks } = useMemo(() => {
-    const legal: DynamicLegalPage[] = [];
-    const policy: DynamicLegalPage[] = [];
-    dynamicLegalLinks.forEach(link => {
-      if (link.category === 'legal') {
-        legal.push(link);
-      } else if (link.category === 'policy') {
-        policy.push(link);
-      }
-    });
-    return { legalLinks: legal, policyLinks: policy };
-  }, [dynamicLegalLinks]);
 
 
   return (
