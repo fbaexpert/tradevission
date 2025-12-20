@@ -15,7 +15,9 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  Timestamp
+  Timestamp,
+  writeBatch,
+  getDocs
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +55,7 @@ import {
 import { LoaderCircle, FileText, PlusCircle, Edit, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { defaultLegalPages } from "@/lib/default-legal-content";
 
 const pageCategories = ['Legal', 'Privacy', 'Terms', 'Policies', 'Help'] as const;
 
@@ -94,7 +97,25 @@ export default function AdminWebsitePages() {
 
   useEffect(() => {
     if (!db) return;
-    setLoading(true);
+
+    const seedDefaultPages = async () => {
+        const pagesCollectionRef = collection(db, "websitePages");
+        const snapshot = await getDocs(pagesCollectionRef);
+        if (snapshot.empty) {
+            const batch = writeBatch(db);
+            defaultLegalPages.forEach(page => {
+                const docRef = doc(pagesCollectionRef);
+                batch.set(docRef, {
+                    ...page,
+                    createdAt: serverTimestamp(),
+                    lastUpdated: serverTimestamp()
+                });
+            });
+            await batch.commit();
+        }
+    };
+
+    seedDefaultPages();
 
     const q = query(collection(db, "websitePages"), orderBy("order", "asc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -125,12 +146,17 @@ export default function AdminWebsitePages() {
     if (!db) return;
     setIsSubmitting(true);
 
+    const payload = {
+        ...data,
+        updatedAt: serverTimestamp()
+    };
+
     try {
       if (editingPage) {
-        await updateDoc(doc(db, "websitePages", editingPage.id), { ...data, updatedAt: serverTimestamp() });
+        await updateDoc(doc(db, "websitePages", editingPage.id), payload);
         toast({ title: "Page Updated" });
       } else {
-        await addDoc(collection(db, "websitePages"), { ...data, createdAt: serverTimestamp() });
+        await addDoc(collection(db, "websitePages"), { ...payload, createdAt: serverTimestamp() });
         toast({ title: "Page Created" });
       }
       handleCancelEdit();
@@ -184,24 +210,7 @@ export default function AdminWebsitePages() {
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="title">Page Title</Label>
-                <Input id="title" {...form.register("title")} onChange={handleTitleChange} />
-                {form.formState.errors.title && <p className="text-red-500 text-sm">{form.formState.errors.title.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="slug">Page Slug (URL)</Label>
-                <Input id="slug" {...form.register("slug")} placeholder="e.g., privacy-policy" />
-                {form.formState.errors.slug && <p className="text-red-500 text-sm">{form.formState.errors.slug.message}</p>}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Textarea id="content" {...form.register("content")} rows={10} />
-              {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 <div className="space-y-2">
+                <div className="space-y-2">
                     <Label htmlFor="category">Category</Label>
                     <Controller
                         name="category"
@@ -218,20 +227,37 @@ export default function AdminWebsitePages() {
                         )}
                     />
                 </div>
-                 <div className="space-y-2">
+                <div className="space-y-2">
+                    <Label htmlFor="title">Page Title</Label>
+                    <Input id="title" {...form.register("title")} onChange={handleTitleChange} />
+                    {form.formState.errors.title && <p className="text-red-500 text-sm">{form.formState.errors.title.message}</p>}
+                </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="slug">Page Slug (URL)</Label>
+                <Input id="slug" {...form.register("slug")} placeholder="e.g., privacy-policy" />
+                {form.formState.errors.slug && <p className="text-red-500 text-sm">{form.formState.errors.slug.message}</p>}
+              </div>
+               <div className="space-y-2">
                     <Label htmlFor="order">Display Order</Label>
                     <Input id="order" type="number" {...form.register("order")} />
                 </div>
-                <div className="flex items-center space-x-2 pt-8">
-                     <Controller
-                        name="isActive"
-                        control={form.control}
-                        render={({ field }) => (
-                            <Switch id="isActive" checked={field.value} onCheckedChange={field.onChange} />
-                        )}
-                    />
-                    <Label htmlFor="isActive">Show in Footer</Label>
-                </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content">Content (HTML or plain text)</Label>
+              <Textarea id="content" {...form.register("content")} rows={10} />
+              {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
+            </div>
+            <div className="flex items-center space-x-2 pt-4">
+                <Controller
+                name="isActive"
+                control={form.control}
+                render={({ field }) => (
+                    <Switch id="isActive" checked={field.value} onCheckedChange={field.onChange} />
+                )}
+                />
+                <Label htmlFor="isActive">Show this page in the website footer</Label>
             </div>
             <div className="flex items-center gap-4">
               <Button type="submit" disabled={isSubmitting}>
@@ -247,64 +273,7 @@ export default function AdminWebsitePages() {
           </form>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white font-bold"><FileText/> Existing Pages</CardTitle>
-            <CardDescription>A list of all created content pages.</CardDescription>
-        </CardHeader>
-        <CardContent>
-             {loading ? (
-                <div className="flex justify-center p-8"><LoaderCircle className="animate-spin"/></div>
-             ) : pages.length === 0 ? (
-                <p className="text-center text-muted-foreground p-8">No pages have been created yet.</p>
-             ) : (
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Title</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Order</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {pages.map(page => (
-                                <TableRow key={page.id}>
-                                    <TableCell className="font-medium">{page.title}</TableCell>
-                                    <TableCell><Badge variant="outline">{page.category}</Badge></TableCell>
-                                    <TableCell>{page.order}</TableCell>
-                                    <TableCell>
-                                        <Badge variant={page.isActive ? "default" : "destructive"}>
-                                            {page.isActive ? "Active" : "Hidden"}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(page)}><Edit className="h-4 w-4"/></Button>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                    <AlertDialogDescription>This will permanently delete the "{page.title}" page.</AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDelete(page.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-             )}
-        </CardContent>
-      </Card>
+      
     </div>
   );
 }

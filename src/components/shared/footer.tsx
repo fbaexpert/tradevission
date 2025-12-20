@@ -56,10 +56,7 @@ export function Footer() {
     const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), orderBy("order", "asc"));
     
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
-        const pages = snapshot.docs.map(doc => {
-          const pageData = { id: doc.id, ...doc.data() } as DynamicLegalPage;
-          return pageData;
-        });
+        const pages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicLegalPage));
         setDynamicPages(pages);
     }, (error) => {
         console.error("Error fetching website pages for footer:", error);
