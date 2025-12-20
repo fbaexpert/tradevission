@@ -1,22 +1,25 @@
-
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LegalDialog } from "./legal-dialog";
+import { LegalDialog, LegalPage as LegalPageType } from "./legal-dialog";
 import { Logo } from "./logo";
-import { Mail, Phone } from "lucide-react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { Mail } from "lucide-react";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
-
-
-type LegalPage = 'privacy' | 'terms' | 'refund' | 'disclaimer' | 'earnings' | 'cookies' | 'risk' | 'anti-fraud' | 'deposit' | 'withdrawal' | 'affiliate' | 'kyc';
 
 interface FooterSettings {
     description: string;
     contactEmail: string;
     copyrightText: string;
+}
+
+interface LegalPage {
+  id: string;
+  title: string;
+  slug: string;
+  order: number;
 }
 
 export function Footer() {
@@ -25,7 +28,7 @@ export function Footer() {
   const isInDashboard = pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogContent, setDialogContent] = useState<LegalPage>('privacy');
+  const [dialogContent, setDialogContent] = useState<LegalPageType>('privacy');
   
   const [footerSettings, setFooterSettings] = useState<FooterSettings>({
       description: "A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.",
@@ -33,10 +36,12 @@ export function Footer() {
       copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
   });
 
+  const [legalLinks, setLegalLinks] = useState<LegalPage[]>([]);
+
   useEffect(() => {
     if (!db) return;
     const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
         if(doc.exists()) {
             const data = doc.data();
             if (data.footer) {
@@ -44,44 +49,43 @@ export function Footer() {
             }
         }
     });
-    return () => unsubscribe();
+
+    const legalQuery = query(collection(db, "legal"), where("inFooter", "==", true), orderBy("order", "asc"));
+    const unsubscribeLegal = onSnapshot(legalQuery, (snapshot) => {
+        const links = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LegalPage));
+        setLegalLinks(links);
+    });
+
+    return () => {
+        unsubscribeSettings();
+        unsubscribeLegal();
+    };
   }, [db]);
 
-
-  const handleLinkClick = (page: LegalPage) => {
-    setDialogContent(page);
+  const handleLinkClick = (slug: LegalPageType) => {
+    setDialogContent(slug);
     setDialogOpen(true);
   }
-  
-  const legalLinks: { page: LegalPage; label: string; href: string; }[] = [
-    { page: 'privacy', label: 'Privacy Policy', href: '/privacy-policy' },
-    { page: 'terms', label: 'Terms & Conditions', href: '/terms-and-conditions' },
-    { page: 'refund', label: 'Refund Policy', href: '/refund-policy' },
-    { page: 'disclaimer', label: 'Disclaimer', href: '/disclaimer' },
-    { page: 'earnings', label: 'Earnings Disclaimer', href: '/earnings-disclaimer' },
-    { page: 'cookies', label: 'Cookies Policy', href: '/cookies-policy' },
-    { page: 'risk', label: 'Risk Warning', href: '/risk-warning' },
-    { page: 'anti-fraud', label: 'Anti-Fraud Policy', href: '/anti-fraud-policy' },
-    { page: 'deposit', label: 'Deposit Policy', href: '/deposit-policy' },
-    { page: 'withdrawal', label: 'Withdrawal Policy', href: '/withdrawal-policy' },
-    { page: 'affiliate', label: 'Affiliate Terms', href: '/affiliate-terms' },
-    { page: 'kyc', label: 'KYC Policy', href: '/kyc-policy' },
-  ];
 
-  const renderLink = (page: LegalPage, label: string, href: string) => {
+  const renderLink = (page: LegalPage) => {
       if (isInDashboard) {
         return (
-          <button onClick={() => handleLinkClick(page)} className="text-sm text-muted-foreground hover:text-primary transition-colors">
-            {label}
+          <button onClick={() => handleLinkClick(page.slug as LegalPageType)} className="text-sm text-muted-foreground hover:text-primary transition-colors text-left">
+            {page.title}
           </button>
         );
       }
       return (
-        <Link href={href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
-          {label}
+        <Link href={`/legal/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+          {page.title}
         </Link>
       );
   }
+  
+  const aboutLinks = [
+    { label: 'About Us', href: '/#about'},
+    { label: 'How It Works', href: '/#how-it-works'},
+  ];
 
   return (
     <>
@@ -99,18 +103,19 @@ export function Footer() {
 
               <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
                   <div>
-                      <h4 className="font-bold text-white mb-4">About Us</h4>
+                      <h4 className="font-bold text-white mb-4">About</h4>
                       <nav className="flex flex-col gap-2">
-                        <Link href="/#about" className="text-sm text-muted-foreground hover:text-primary transition-colors">About TradeVission</Link>
-                        <Link href="/#how-it-works" className="text-sm text-muted-foreground hover:text-primary transition-colors">How It Works</Link>
+                        {aboutLinks.map(link => (
+                             <Link key={link.href} href={link.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">{link.label}</Link>
+                        ))}
                       </nav>
                   </div>
                    <div>
                       <h4 className="font-bold text-white mb-4">Legal</h4>
                       <nav className="flex flex-col gap-2">
                          {legalLinks.slice(0, 4).map(link => (
-                            <div key={link.page}>
-                              {renderLink(link.page, link.label, link.href)}
+                            <div key={link.id}>
+                              {renderLink(link)}
                             </div>
                          ))}
                       </nav>
@@ -118,9 +123,9 @@ export function Footer() {
                   <div>
                     <h4 className="font-bold text-white mb-4">Policies</h4>
                     <nav className="flex flex-col gap-2">
-                        {legalLinks.slice(4, 12).map(link => (
-                            <div key={link.page}>
-                                {renderLink(link.page, link.label, link.href)}
+                        {legalLinks.slice(4).map(link => (
+                            <div key={link.id}>
+                               {renderLink(link)}
                             </div>
                          ))}
                     </nav>

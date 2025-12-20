@@ -123,6 +123,14 @@
         { "fieldPath": "isEnabled", "order": "ASCENDING" },
         { "fieldPath": "minDeposit", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "legal",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inFooter", "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

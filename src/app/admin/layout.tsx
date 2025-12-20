@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -39,6 +38,7 @@ import {
   FlipVertical,
   ShieldCheck,
   Trophy,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +80,7 @@ const navItems = [
   { href: "/admin/notifications", icon: Bell, label: "Notifications" },
   { href: "/admin/airdrop", icon: Gift, label: "Airdrop" },
   { href: "/admin/activity-logs", icon: FileClock, label: "Activity Logs" },
+  { href: "/admin/legal", icon: Scale, label: "Legal Pages" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
