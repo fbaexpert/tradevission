@@ -219,7 +219,6 @@ export default function AdminSettingsPage() {
         setSaving(true);
         const settingsDocRef = doc(db, "system", "settings");
         
-        // Filter out any empty categories before saving
         const cleanedSettings = {
             ...settings,
             pageCategories: settings.pageCategories?.filter(cat => cat.name.trim() !== '')
@@ -692,3 +691,5 @@ export default function AdminSettingsPage() {
         </>
     );
 }
+
+    
