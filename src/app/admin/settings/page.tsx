@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc, serverTimestamp, updateDoc, addDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc, serverTimestamp, updateDoc, addDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -61,6 +61,7 @@ interface PlanTag {
 interface PageCategory {
     id: string;
     name: string;
+    createdAt?: Timestamp;
 }
 
 interface DepositBoostEvent {
@@ -200,7 +201,7 @@ export default function AdminSettingsPage() {
             setLoading(false);
         });
 
-        const categoriesQuery = query(collection(db, "categories"), orderBy("createdAt", "asc"));
+        const categoriesQuery = query(collection(db, "categories"), orderBy("name", "asc"));
         const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
             const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
             setPageCategories(cats);
@@ -254,15 +255,20 @@ export default function AdminSettingsPage() {
             });
             toast({ title: "Category Added" });
             setNewCategoryName("");
-        } catch (error) {
-            toast({ variant: "destructive", title: "Error", description: "Could not add category." });
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Error", description: error.message || "Could not add category." });
         } finally {
             setIsCategorySaving(false);
         }
     }
 
     const handleAddDefaultCategories = async () => {
-        if (!db) return;
+        if (!db || !user) return;
+        if (user.email !== "ummarfarooq38990@gmail.com") {
+             toast({ variant: "destructive", title: "Permission Denied" });
+             return;
+        }
+
         setIsCategorySaving(true);
         try {
             const existingCategoryNames = new Set(pageCategories.map(c => c.name.toLowerCase()));
@@ -282,8 +288,8 @@ export default function AdminSettingsPage() {
             await batch.commit();
 
             toast({ title: "Default Categories Added", description: `${categoriesToAdd.length} new categories were added.` });
-        } catch (error) {
-            toast({ variant: "destructive", title: "Error", description: "Could not add default categories." });
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Error", description: error.message || "Could not add default categories." });
         } finally {
             setIsCategorySaving(false);
         }
