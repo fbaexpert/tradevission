@@ -24,14 +24,16 @@ export default function DynamicPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { id } = params;
+
   useEffect(() => {
-    if (!db || !params.id) return;
+    if (!db || !id) return;
 
     const fetchPage = async () => {
       setLoading(true);
       setError(null);
       try {
-        const docRef = doc(db, "pages", params.id);
+        const docRef = doc(db, "pages", id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -48,7 +50,7 @@ export default function DynamicPage({ params }: { params: { id: string } }) {
     };
 
     fetchPage();
-  }, [db, params.id]);
+  }, [db, id]);
 
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
