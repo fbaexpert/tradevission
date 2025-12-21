@@ -58,7 +58,13 @@ export function Footer() {
   }, [db]);
 
   const groupedPages = useMemo(() => {
-    return pages.reduce((acc, page) => {
+    // Filter out unwanted pages before grouping
+    const filteredPages = pages.filter(page => 
+        page.title.toLowerCase() !== 'about' && 
+        page.title.toLowerCase() !== 'hello'
+    );
+      
+    return filteredPages.reduce((acc, page) => {
         const category = page.category || 'Other';
         if (!acc[category]) {
             acc[category] = [];

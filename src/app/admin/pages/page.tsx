@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,6 +16,7 @@ import {
   query,
   orderBy,
   getDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
@@ -77,11 +79,16 @@ export default function AdminPages() {
         return;
     }
 
-    const q = query(collection(db, "pages"), orderBy("category"), orderBy("order"));
+    // A simpler query to fetch all pages, then we sort client-side
+    const q = query(collection(db, "pages"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
-      const pagesData = snapshot.docs.map(
+      let pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
       );
+
+      // Sort client-side to ensure all documents are displayed
+      pagesData.sort((a, b) => (a.category || "").localeCompare(b.category || "") || (a.order || 0) - (b.order || 0));
+
       setPages(pagesData);
       setLoading(false); 
     }, (error) => {
@@ -136,12 +143,7 @@ export default function AdminPages() {
   const handleEdit = (page: WebsitePage) => {
     if(!db) return;
     setEditingPage(page);
-    form.reset({
-        title: page.title,
-        category: page.category,
-        order: page.order,
-        content: "Loading content...",
-    });
+    // Fetch full content for editing
     const pageDocRef = doc(db, "pages", page.id);
     getDoc(pageDocRef).then(docSnap => {
         if (docSnap.exists()) {
