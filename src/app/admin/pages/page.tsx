@@ -16,6 +16,7 @@ import {
   query,
   orderBy,
   Timestamp,
+  getDoc,
 } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 import { useToast } from "@/hooks/use-toast";
