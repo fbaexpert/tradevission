@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoaderCircle, FileText, PlusCircle, Trash2, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,6 +65,10 @@ export default function AdminPages() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
+
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
   const form = useForm<PageFormData>({
     resolver: zodResolver(pageSchema),
@@ -106,13 +111,42 @@ export default function AdminPages() {
     };
   }, [db, toast]);
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim() || !db) return;
+    setIsCreatingCategory(true);
+    try {
+        const docRef = await addDoc(collection(db, "categories"), {
+            name: newCategoryName.trim(),
+            createdAt: serverTimestamp(),
+        });
+        toast({ title: "Category Added" });
+        form.setValue("category", newCategoryName.trim());
+        setNewCategoryName("");
+        setIsCategoryDialogOpen(false);
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message || "Could not add category." });
+    } finally {
+        setIsCreatingCategory(false);
+    }
+  }
+
+  const handleCategoryChange = (value: string) => {
+    if (value === "create_new") {
+      setIsCategoryDialogOpen(true);
+    } else {
+      form.setValue("category", value);
+    }
+  };
+
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
     
-    let promise;
+    const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
     const dataToSave = {
         ...data,
+        slug,
         updatedAt: serverTimestamp(),
     };
 
@@ -164,6 +198,7 @@ export default function AdminPages() {
   };
 
   return (
+    <>
     <div className="space-y-8">
       <Card>
         <CardHeader>
@@ -189,12 +224,15 @@ export default function AdminPages() {
                   name="category"
                   control={form.control}
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={handleCategoryChange} value={field.value}>
                         <SelectTrigger id="category"><SelectValue placeholder="Select a category"/></SelectTrigger>
                         <SelectContent>
                             {pageCategories.map(cat => (
                                 <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                             ))}
+                            <SelectItem value="create_new" className="text-primary font-bold">
+                                + Create new category...
+                            </SelectItem>
                         </SelectContent>
                     </Select>
                   )}
@@ -300,5 +338,36 @@ export default function AdminPages() {
         </CardContent>
       </Card>
     </div>
+
+    <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create New Category</DialogTitle>
+          <DialogDescription>
+            Enter a name for the new category. This will appear in the footer.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Label htmlFor="new-category-name">Category Name</Label>
+          <Input
+            id="new-category-name"
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            placeholder="e.g., Resources"
+            disabled={isCreatingCategory}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)} disabled={isCreatingCategory}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateCategory} disabled={isCreatingCategory || !newCategoryName.trim()}>
+            {isCreatingCategory && <LoaderCircle className="animate-spin mr-2" />}
+            Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
