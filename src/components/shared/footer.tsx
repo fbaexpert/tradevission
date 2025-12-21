@@ -40,6 +40,7 @@ export function Footer() {
   useEffect(() => {
     if (!db) return;
     
+    // Fetch only active pages
     const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true));
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
         const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
@@ -52,11 +53,17 @@ export function Footer() {
         setCategories(catsData);
     });
     
-    // You can also fetch footer settings from a 'system/settings' doc if needed
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
+        if (doc.exists() && doc.data().footer) {
+            setFooterSettings(doc.data().footer);
+        }
+    });
 
     return () => {
         unsubscribePages();
         unsubscribeCategories();
+        unsubscribeSettings();
     };
   }, [db]);
 
@@ -113,5 +120,3 @@ export function Footer() {
     </footer>
   );
 }
-
-    

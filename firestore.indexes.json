@@ -128,12 +128,16 @@
       "collectionGroup": "pages",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "isActive", "order": "ASCENDING" },
-        { "fieldPath": "order", "order": "ASCENDING" }
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "categories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" }
       ]
     }
   ],
   "fieldOverrides": []
 }
-
-    

@@ -35,6 +35,7 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
       setLoading(true);
       setError(null);
       try {
+        // Use the page ID (slug from URL) to fetch the document
         const docRef = doc(db, "pages", params.slug);
         const docSnap = await getDoc(docRef);
 
@@ -113,5 +114,3 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
     </div>
   );
 }
-
-    
