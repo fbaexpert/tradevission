@@ -50,6 +50,7 @@ interface WebsitePage {
   createdAt: Timestamp;
   updatedAt?: Timestamp;
   isActive: boolean;
+  slug: string;
 }
 
 interface PageCategory {
@@ -115,7 +116,7 @@ export default function AdminPages() {
     if (!newCategoryName.trim() || !db) return;
     setIsCreatingCategory(true);
     try {
-        const docRef = await addDoc(collection(db, "categories"), {
+        await addDoc(collection(db, "categories"), {
             name: newCategoryName.trim(),
             createdAt: serverTimestamp(),
         });
@@ -129,6 +130,17 @@ export default function AdminPages() {
         setIsCreatingCategory(false);
     }
   }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!db) return;
+    try {
+        await deleteDoc(doc(db, "categories", categoryId));
+        toast({ title: "Category Deleted" });
+    } catch (error) {
+        toast({ variant: "destructive", title: "Error", description: "Could not delete category." });
+    }
+  }
+
 
   const handleCategoryChange = (value: string) => {
     if (value === "create_new") {
@@ -254,7 +266,7 @@ export default function AdminPages() {
                      <Switch id="isActive" checked={field.value} onCheckedChange={field.onChange} />
                   )}
                 />
-                <Label htmlFor="isActive">Show this page in the footer</Label>
+                <Label htmlFor="isActive">Show this page on the website</Label>
             </div>
             <div className="flex items-center gap-4">
               <Button type="submit" disabled={isSubmitting}>
@@ -343,28 +355,58 @@ export default function AdminPages() {
     <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Category</DialogTitle>
+          <DialogTitle>Manage Categories</DialogTitle>
           <DialogDescription>
-            Enter a name for the new category. This will appear in the footer.
+            Add a new category or delete existing ones.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
-          <Label htmlFor="new-category-name">Category Name</Label>
-          <Input
-            id="new-category-name"
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            placeholder="e.g., Resources"
-            disabled={isCreatingCategory}
-          />
+        <div className="py-4 space-y-4">
+            <div>
+                <Label htmlFor="new-category-name" className="text-white font-bold">Create New Category</Label>
+                <div className="flex items-center gap-2 mt-2">
+                    <Input
+                        id="new-category-name"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="e.g., Resources"
+                        disabled={isCreatingCategory}
+                    />
+                    <Button onClick={handleCreateCategory} disabled={isCreatingCategory || !newCategoryName.trim()}>
+                        {isCreatingCategory ? <LoaderCircle className="animate-spin" /> : "Add"}
+                    </Button>
+                </div>
+            </div>
+            <div className="space-y-2 pt-4 border-t">
+                <Label className="text-white font-bold">Existing Categories</Label>
+                 <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
+                    {pageCategories.map((category) => (
+                        <div key={category.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
+                            <span className="font-medium">{category.name}</span>
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Are you sure you want to delete the "{category.name}" category? This will not delete the pages within it.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeleteCategory(category.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
+                    ))}
+                 </div>
+            </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)} disabled={isCreatingCategory}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreateCategory} disabled={isCreatingCategory || !newCategoryName.trim()}>
-            {isCreatingCategory && <LoaderCircle className="animate-spin mr-2" />}
-            Create
+          <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>
