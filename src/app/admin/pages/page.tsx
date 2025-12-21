@@ -35,6 +35,7 @@ const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   category: z.string().min(1, "Category is required."),
   content: z.string().min(10, "Content is required."),
+  order: z.coerce.number().default(0),
 });
 
 type PageFormData = z.infer<typeof pageSchema>;
@@ -43,20 +44,15 @@ interface WebsitePage {
   id: string;
   title: string;
   category: string;
+  order: number;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
-}
-
-interface PageCategory {
-    id: string;
-    name: string;
 }
 
 export default function AdminPages() {
   const { db } = useFirebase();
   const { toast } = useToast();
   const [pages, setPages] = useState<WebsitePage[]>([]);
-  const [categories, setCategories] = useState<PageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
@@ -67,13 +63,14 @@ export default function AdminPages() {
       title: "",
       category: "",
       content: "",
+      order: 0,
     },
   });
 
   useEffect(() => {
     if (!db) return;
 
-    const q = query(collection(db, "pages"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "pages"), orderBy("category"), orderBy("order"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
       const pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
@@ -82,17 +79,8 @@ export default function AdminPages() {
       setLoading(false);
     });
 
-    const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        setCategories(data.pageCategories || []);
-      }
-    });
-
     return () => {
       unsubscribePages();
-      unsubscribeCategories();
     };
   }, [db]);
 
@@ -130,6 +118,7 @@ export default function AdminPages() {
     form.reset({
         title: page.title,
         category: page.category,
+        order: page.order,
         content: "Loading content...", // Placeholder
     });
     // Fetch full content for editing
@@ -144,7 +133,7 @@ export default function AdminPages() {
 
   const handleCancelEdit = () => {
     setEditingPage(null);
-    form.reset({ title: "", category: "", content: "" });
+    form.reset({ title: "", category: "", content: "", order: 0 });
   }
 
   const handleDelete = async (pageId: string) => {
@@ -171,7 +160,7 @@ export default function AdminPages() {
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="title">Page Title</Label>
                 <Input id="title" {...form.register("title")} />
@@ -179,21 +168,16 @@ export default function AdminPages() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Controller
-                  name="category"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
-                      <SelectContent>
-                        {categories.map(cat => (
-                          <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                <Input 
+                    id="category" 
+                    {...form.register("category")}
+                    placeholder="e.g. Legal, Help, About"
                 />
                  {form.formState.errors.category && <p className="text-red-500 text-sm">{form.formState.errors.category.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order">Display Order</Label>
+                <Input id="order" type="number" {...form.register("order")} />
               </div>
             </div>
             <div className="space-y-2">
@@ -233,6 +217,7 @@ export default function AdminPages() {
                   <TableRow>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead>Order</TableHead>
                     <TableHead>Last Updated</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -242,6 +227,7 @@ export default function AdminPages() {
                     <TableRow key={page.id}>
                       <TableCell className="font-medium">{page.title}</TableCell>
                       <TableCell>{page.category}</TableCell>
+                      <TableCell>{page.order}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {page.updatedAt ? formatDistanceToNow(page.updatedAt.toDate(), { addSuffix: true }) : (page.createdAt ? formatDistanceToNow(page.createdAt.toDate(), { addSuffix: true }) : 'N/A')}
                       </TableCell>
