@@ -11,7 +11,7 @@ import { useFirebase } from "@/lib/firebase/provider";
 interface DynamicPage {
   id: string;
   title: string;
-  category: 'Legal' | 'Privacy' | 'Terms' | 'Help' | 'Policies';
+  category: string;
 }
 
 interface FooterSettings {
@@ -34,8 +34,8 @@ export function Footer() {
   useEffect(() => {
     if (!db) return;
     
-    // Listener for dynamic pages
-    const pagesQuery = query(collection(db, "pages"), orderBy("createdAt", "desc"));
+    // Listener for dynamic pages from the correct 'pages' collection
+    const pagesQuery = query(collection(db, "pages"), orderBy("order", "asc"));
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
         const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
         setPages(pagesData);

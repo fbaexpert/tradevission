@@ -16,8 +16,8 @@ import { Timestamp } from 'firebase/firestore';
 interface PageContent {
     title: string;
     content: string;
-    lastUpdated?: Timestamp;
     updatedAt?: Timestamp;
+    createdAt?: Timestamp;
 }
 
 export default function LegalPage({ params }: { params: { slug: string } }) {
@@ -33,14 +33,14 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
       setLoading(true);
       setError(null);
       try {
-        const q = query(collection(db, "websitePages"), where("slug", "==", params.slug));
-        const querySnapshot = await getDocs(q);
+        // Updated to query 'pages' collection by ID instead of slug
+        const docRef = doc(db, "pages", params.slug);
+        const docSnap = await getDoc(docRef);
 
-        if (querySnapshot.empty) {
-          setError("The page you are looking for does not exist.");
+        if (docSnap.exists()) {
+          setPageContent(docSnap.data() as PageContent);
         } else {
-          const docData = querySnapshot.docs[0].data() as PageContent;
-          setPageContent(docData);
+          setError("The page you are looking for does not exist.");
         }
       } catch (err) {
         setError("Failed to load the page content.");
@@ -53,7 +53,7 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
     fetchPage();
   }, [db, params.slug]);
 
-  const lastUpdated = pageContent?.updatedAt || pageContent?.lastUpdated;
+  const lastUpdated = pageContent?.updatedAt || pageContent?.createdAt;
 
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
