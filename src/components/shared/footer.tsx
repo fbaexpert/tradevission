@@ -34,14 +34,12 @@ export function Footer() {
   useEffect(() => {
     if (!db) return;
     
-    // Listener for dynamic pages from the correct 'pages' collection
     const pagesQuery = query(collection(db, "pages"), orderBy("order", "asc"));
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
         const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
         setPages(pagesData);
     });
 
-    // Listener for footer settings
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
         if (doc.exists() && doc.data().footer) {
@@ -58,13 +56,7 @@ export function Footer() {
   }, [db]);
 
   const groupedPages = useMemo(() => {
-    // Filter out unwanted pages before grouping
-    const filteredPages = pages.filter(page => 
-        page.title.toLowerCase() !== 'about' && 
-        page.title.toLowerCase() !== 'hello'
-    );
-      
-    return filteredPages.reduce((acc, page) => {
+    return pages.reduce((acc, page) => {
         const category = page.category || 'Other';
         if (!acc[category]) {
             acc[category] = [];
