@@ -30,13 +30,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LoaderCircle, FileText, PlusCircle, Trash2, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDistanceToNow } from 'date-fns';
+import { Switch } from "@/components/ui/switch";
 
 const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
-  slug: z.string().optional(),
   category: z.string().min(1, "Category is required."),
   content: z.string().min(10, "Content is required."),
-  order: z.coerce.number().default(0),
+  isActive: z.boolean().default(true),
 });
 
 type PageFormData = z.infer<typeof pageSchema>;
@@ -45,23 +45,14 @@ interface WebsitePage {
   id: string;
   title: string;
   category: string;
-  order: number;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  isActive: boolean;
 }
 
 interface PageCategory {
     id: string;
     name: string;
-}
-
-const createSlug = (title: string) => {
-    return title
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-');
 }
 
 export default function AdminPages() {
@@ -77,10 +68,9 @@ export default function AdminPages() {
     resolver: zodResolver(pageSchema),
     defaultValues: {
       title: "",
-      slug: "",
       category: "",
       content: "",
-      order: 0,
+      isActive: true,
     },
   });
 
@@ -90,7 +80,7 @@ export default function AdminPages() {
         return;
     }
 
-    const q = query(collection(db, "pages"), orderBy("category"), orderBy("order"));
+    const q = query(collection(db, "pages"), orderBy("createdAt", "desc"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
       let pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
@@ -103,11 +93,10 @@ export default function AdminPages() {
         setLoading(false);
     });
 
-    const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
-        if (doc.exists()) {
-            setPageCategories(doc.data().pageCategories || []);
-        }
+    const categoriesQuery = query(collection(db, "categories"), orderBy("name", "asc"));
+    const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
+        const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
+        setPageCategories(cats);
     });
 
     return () => {
@@ -119,13 +108,10 @@ export default function AdminPages() {
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
-
-    const slug = data.slug || createSlug(data.title);
     
     let promise;
     const dataToSave = {
         ...data,
-        slug,
         updatedAt: serverTimestamp(),
     };
 
@@ -152,7 +138,6 @@ export default function AdminPages() {
   const handleEdit = (page: WebsitePage) => {
     if(!db) return;
     setEditingPage(page);
-    // Fetch full content for editing
     const pageDocRef = doc(db, "pages", page.id);
     getDoc(pageDocRef).then(docSnap => {
         if (docSnap.exists()) {
@@ -164,7 +149,7 @@ export default function AdminPages() {
 
   const handleCancelEdit = () => {
     setEditingPage(null);
-    form.reset({ title: "", category: "", content: "", order: 0 });
+    form.reset({ title: "", category: "", content: "", isActive: true });
   }
 
   const handleDelete = async (pageId: string) => {
@@ -191,7 +176,7 @@ export default function AdminPages() {
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="title">Page Title</Label>
                 <Input id="title" {...form.register("title")} />
@@ -215,15 +200,21 @@ export default function AdminPages() {
                 />
                  {form.formState.errors.category && <p className="text-red-500 text-sm">{form.formState.errors.category.message}</p>}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="order">Display Order</Label>
-                <Input id="order" type="number" {...form.register("order")} />
-              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="content">Content</Label>
               <Textarea id="content" {...form.register("content")} rows={10} />
               {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
+            </div>
+             <div className="flex items-center space-x-2">
+                <Controller
+                  name="isActive"
+                  control={form.control}
+                  render={({ field }) => (
+                     <Switch id="isActive" checked={field.value} onCheckedChange={field.onChange} />
+                  )}
+                />
+                <Label htmlFor="isActive">Show this page in the footer</Label>
             </div>
             <div className="flex items-center gap-4">
               <Button type="submit" disabled={isSubmitting}>
@@ -257,7 +248,7 @@ export default function AdminPages() {
                   <TableRow>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Order</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Last Updated</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -267,7 +258,11 @@ export default function AdminPages() {
                     <TableRow key={page.id}>
                       <TableCell className="font-medium">{page.title}</TableCell>
                       <TableCell>{page.category}</TableCell>
-                      <TableCell>{page.order}</TableCell>
+                      <TableCell>
+                        <Badge variant={page.isActive ? "default" : "secondary"}>
+                            {page.isActive ? "Active" : "Hidden"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {page.updatedAt ? formatDistanceToNow(page.updatedAt.toDate(), { addSuffix: true }) : (page.createdAt ? formatDistanceToNow(page.createdAt.toDate(), { addSuffix: true }) : 'N/A')}
                       </TableCell>
@@ -306,3 +301,5 @@ export default function AdminPages() {
     </div>
   );
 }
+
+    

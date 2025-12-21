@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState } from 'react';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Footer } from "@/components/shared/footer";
@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/shared/logo";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
-import { Timestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+
 
 interface PageContent {
     title: string;
@@ -22,6 +23,7 @@ interface PageContent {
 
 export default function LegalPage({ params }: { params: { slug: string } }) {
   const { db } = useFirebase();
+  const router = useRouter();
   const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,6 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
       setLoading(true);
       setError(null);
       try {
-        // Updated to query 'pages' collection by ID instead of slug
         const docRef = doc(db, "pages", params.slug);
         const docSnap = await getDoc(docRef);
 
@@ -58,15 +59,15 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <Logo />
           <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
             TradeVission
           </h1>
-        </div>
+        </Link>
         <nav>
-          <Button asChild variant="outline">
-            <Link href="/"><ArrowLeft className="mr-2"/> Back to Home</Link>
+          <Button variant="outline" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2"/> Back
           </Button>
         </nav>
       </header>
@@ -112,3 +113,5 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
     </div>
   );
 }
+
+    

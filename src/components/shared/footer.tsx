@@ -5,14 +5,18 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, onSnapshot, query, orderBy, doc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 
 interface DynamicPage {
   id: string;
   title: string;
   category: string;
-  slug: string;
+}
+
+interface PageCategory {
+  id: string;
+  name: string;
 }
 
 interface FooterSettings {
@@ -30,42 +34,38 @@ const defaultFooterSettings: FooterSettings = {
 export function Footer() {
   const { db } = useFirebase();
   const [pages, setPages] = useState<DynamicPage[]>([]);
+  const [categories, setCategories] = useState<PageCategory[]>([]);
   const [footerSettings, setFooterSettings] = useState<FooterSettings>(defaultFooterSettings);
 
   useEffect(() => {
     if (!db) return;
     
-    const pagesQuery = query(collection(db, "pages"), orderBy("order", "asc"));
+    const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true));
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
         const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
         setPages(pagesData);
     });
 
-    const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
-        if (doc.exists() && doc.data().footer) {
-            setFooterSettings(doc.data().footer);
-        } else {
-            setFooterSettings(defaultFooterSettings);
-        }
+    const categoriesQuery = query(collection(db, "categories"), orderBy("name", "asc"));
+    const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
+        const catsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
+        setCategories(catsData);
     });
+    
+    // You can also fetch footer settings from a 'system/settings' doc if needed
 
     return () => {
         unsubscribePages();
-        unsubscribeSettings();
+        unsubscribeCategories();
     };
   }, [db]);
 
   const groupedPages = useMemo(() => {
-    return pages.reduce((acc, page) => {
-        const category = page.category || 'Other';
-        if (!acc[category]) {
-            acc[category] = [];
-        }
-        acc[category].push(page);
-        return acc;
-    }, {} as Record<string, DynamicPage[]>);
-  }, [pages]);
+    return categories.map(category => ({
+        ...category,
+        pages: pages.filter(page => page.category === category.name)
+    })).filter(category => category.pages.length > 0);
+  }, [pages, categories]);
 
   return (
     <footer className="border-t border-border/20 py-12 px-6 bg-background">
@@ -81,12 +81,12 @@ export function Footer() {
             </div>
 
             <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
-                {Object.entries(groupedPages).map(([category, pagesInCategory]) => (
-                  <div key={category}>
-                      <h4 className="font-bold text-white mb-4">{category}</h4>
+                {groupedPages.map((category) => (
+                  <div key={category.id}>
+                      <h4 className="font-bold text-white mb-4">{category.name}</h4>
                       <nav className="flex flex-col gap-2">
-                          {pagesInCategory.map(page => (
-                              <Link key={page.id} href={`/page/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                          {category.pages.map(page => (
+                              <Link key={page.id} href={`/legal/${page.id}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                 {page.title}
                               </Link>
                           ))}
@@ -113,3 +113,5 @@ export function Footer() {
     </footer>
   );
 }
+
+    

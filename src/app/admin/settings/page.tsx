@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, collection, writeBatch, getDocs, deleteDoc, serverTimestamp, updateDoc, addDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -85,7 +85,6 @@ interface AppSettings {
     superBonusTiers: SuperBonusTier[];
     commander: CommanderSettings;
     planTags?: PlanTag[];
-    pageCategories?: PageCategory[];
     depositBoost?: DepositBoostEvent;
     footer: FooterSettings;
 }
@@ -116,14 +115,6 @@ const defaultSettings: AppSettings = {
         { id: nanoid(), name: "Popular", color: "#3b82f6" },
         { id: nanoid(), name: "Limited", color: "#f59e0b" },
         { id: nanoid(), name: "Best Seller", color: "#8b5cf6" },
-    ],
-    pageCategories: [
-        { id: nanoid(), name: "Legal" },
-        { id: nanoid(), name: "Privacy" },
-        { id: nanoid(), name: "Terms" },
-        { id: nanoid(), name: "Help" },
-        { id: nanoid(), name: "Policies" },
-        { id: nanoid(), name: "About Us" },
     ],
     depositBoost: {
         enabled: false,
@@ -172,13 +163,18 @@ export default function AdminSettingsPage() {
     const [isCountdownActive, setIsCountdownActive] = useState(false);
     const [countdown, setCountdown] = useState(60);
     const [isResetting, setIsResetting] = useState(false);
+    
+    // New state for page categories
+    const [pageCategories, setPageCategories] = useState<PageCategory[]>([]);
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [isCategorySaving, setIsCategorySaving] = useState(false);
+
 
     useEffect(() => {
         if (!db) return;
 
         const settingsDocRef = doc(db, "system", "settings");
-
-        const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
+        const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
                 
@@ -189,7 +185,6 @@ export default function AdminSettingsPage() {
                     commander: { ...defaultSettings.commander, ...(data.commander || {}) },
                     superBonusTiers: data.superBonusTiers && data.superBonusTiers.length > 0 ? data.superBonusTiers : defaultSettings.superBonusTiers,
                     planTags: data.planTags && data.planTags.length > 0 ? data.planTags : defaultSettings.planTags,
-                    pageCategories: data.pageCategories && data.pageCategories.length > 0 ? data.pageCategories : defaultSettings.pageCategories,
                     depositBoost: { ...defaultSettings.depositBoost!, ...(data.depositBoost || {}) },
                     footer: { ...defaultSettings.footer, ...(data.footer || {}) }
                 };
@@ -203,7 +198,16 @@ export default function AdminSettingsPage() {
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        const categoriesQuery = query(collection(db, "categories"), orderBy("createdAt", "asc"));
+        const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
+            const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
+            setPageCategories(cats);
+        });
+
+        return () => {
+          unsubscribeSettings();
+          unsubscribeCategories();
+        };
     }, [db]);
     
     useEffect(() => {
@@ -221,12 +225,7 @@ export default function AdminSettingsPage() {
         setSaving(true);
         const settingsDocRef = doc(db, "system", "settings");
         
-        const cleanedSettings = {
-            ...settings,
-            pageCategories: settings.pageCategories?.filter(cat => cat.name.trim() !== '')
-        };
-
-        setDoc(settingsDocRef, cleanedSettings, { merge: true }).then(() => {
+        setDoc(settingsDocRef, settings, { merge: true }).then(() => {
             toast({
                 title: "Settings Saved",
                 description: "Global settings have been updated successfully.",
@@ -242,6 +241,33 @@ export default function AdminSettingsPage() {
             setSaving(false);
         });
     };
+    
+    const handleAddCategory = async () => {
+        if (!newCategoryName.trim() || !db) return;
+        setIsCategorySaving(true);
+        try {
+            await addDoc(collection(db, "categories"), {
+                name: newCategoryName.trim(),
+                createdAt: serverTimestamp(),
+            });
+            toast({ title: "Category Added" });
+            setNewCategoryName("");
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error", description: "Could not add category." });
+        } finally {
+            setIsCategorySaving(false);
+        }
+    }
+
+    const handleDeleteCategory = async (categoryId: string) => {
+        if (!db) return;
+        try {
+            await deleteDoc(doc(db, "categories", categoryId));
+            toast({ title: "Category Deleted" });
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error", description: "Could not delete category." });
+        }
+    }
 
     const handleStartResetCountdown = async () => {
         if (!user || !user.email) {
@@ -377,26 +403,6 @@ export default function AdminSettingsPage() {
         const newTags = (settings.planTags || []).filter((_, i) => i !== index);
         setSettings({ ...settings, planTags: newTags });
     };
-
-    const handlePageCategoryChange = (index: number, value: string) => {
-        if (!settings) return;
-        const newCategories = [...(settings.pageCategories || [])];
-        newCategories[index] = { ...newCategories[index], name: value };
-        setSettings({ ...settings, pageCategories: newCategories });
-    };
-
-    const addPageCategory = () => {
-        if (!settings) return;
-        const newCategories = [...(settings.pageCategories || [])];
-        newCategories.push({ id: nanoid(), name: "" });
-        setSettings({ ...settings, pageCategories: newCategories });
-    };
-
-    const removePageCategory = (index: number) => {
-        if (!settings) return;
-        const newCategories = (settings.pageCategories || []).filter((_, i) => i !== index);
-        setSettings({ ...settings, pageCategories: newCategories });
-    };
     
     if(loading || !settings) {
         return <div className="flex justify-center items-center h-full"><LoaderCircle className="animate-spin mx-auto mt-10"/></div>
@@ -434,7 +440,6 @@ export default function AdminSettingsPage() {
                         <p className="text-sm text-muted-foreground">This email will be displayed to users for support inquiries.</p>
                     </div>
 
-                    {/* Footer Settings */}
                     <div className="space-y-4 rounded-lg border p-4">
                         <div className="space-y-0.5">
                             <Label className="text-base flex items-center gap-2">Footer Settings</Label>
@@ -456,28 +461,43 @@ export default function AdminSettingsPage() {
                         </div>
                     </div>
                      
-                    {/* Page Categories Settings */}
                     <div className="space-y-4 rounded-lg border p-4">
                         <Label className="text-base flex items-center gap-2"><BookText /> Manage Page Categories</Label>
                         <p className="text-sm text-muted-foreground">Create and manage categories for website pages (e.g., Legal, Help).</p>
-                        <div className="space-y-2 pt-2 border-t">
-                            {(settings.pageCategories || []).map((category, index) => (
-                                <div key={category.id} className="flex items-center gap-2">
-                                    <Input 
-                                        type="text" 
-                                        placeholder="Category Name" 
-                                        value={category.name}
-                                        onChange={(e) => handlePageCategoryChange(index, e.target.value)}
-                                    />
-                                    <Button variant="destructive" size="icon" onClick={() => removePageCategory(index)}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            ))}
-                            <Button variant="outline" onClick={addPageCategory}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Add Category
-                            </Button>
+                        <div className="space-y-4 pt-4 border-t">
+                            <div className="flex items-center gap-2">
+                                <Input 
+                                    placeholder="New category name..."
+                                    value={newCategoryName}
+                                    onChange={(e) => setNewCategoryName(e.target.value)}
+                                    disabled={isCategorySaving}
+                                />
+                                <Button onClick={handleAddCategory} disabled={isCategorySaving || !newCategoryName.trim()}>
+                                    {isCategorySaving ? <LoaderCircle className="animate-spin" /> : <PlusCircle />}
+                                </Button>
+                            </div>
+                            <div className="space-y-2">
+                                {pageCategories.map((category) => (
+                                    <div key={category.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
+                                        <span className="font-medium">{category.name}</span>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>This will delete the "{category.name}" category.</AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDeleteCategory(category.id)} className="bg-destructive">Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
