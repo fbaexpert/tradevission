@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Footer } from "@/components/shared/footer";
@@ -24,23 +24,24 @@ export default function DynamicPage() {
   const { db } = useFirebase();
   const router = useRouter();
   const params = useParams();
-  const id = params.id as string;
+  const slug = params.slug as string;
 
   const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!db || !id) return;
+    if (!db || !slug) return;
 
     const fetchPage = async () => {
       setLoading(true);
       setError(null);
       try {
-        const docRef = doc(db, "pages", id);
-        const docSnap = await getDoc(docRef);
+        const q = query(collection(db, "pages"), where("slug", "==", slug));
+        const querySnapshot = await getDocs(q);
 
-        if (docSnap.exists()) {
+        if (!querySnapshot.empty) {
+          const docSnap = querySnapshot.docs[0];
           setPageContent(docSnap.data() as PageContent);
         } else {
           setError("The page you are looking for does not exist.");
@@ -54,7 +55,7 @@ export default function DynamicPage() {
     };
 
     fetchPage();
-  }, [db, id]);
+  }, [db, slug]);
 
   const lastUpdated = pageContent?.updatedAt || pageContent?.createdAt;
 

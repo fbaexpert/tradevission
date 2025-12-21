@@ -12,6 +12,7 @@ interface DynamicPage {
   id: string;
   title: string;
   category: string;
+  slug: string;
 }
 
 interface FooterSettings {
@@ -85,7 +86,7 @@ export function Footer() {
                       <h4 className="font-bold text-white mb-4">{category}</h4>
                       <nav className="flex flex-col gap-2">
                           {pagesInCategory.map(page => (
-                              <Link key={page.id} href={`/page/${page.id}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                              <Link key={page.id} href={`/page/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                 {page.title}
                               </Link>
                           ))}

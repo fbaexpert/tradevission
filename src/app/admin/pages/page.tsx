@@ -33,6 +33,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
+  slug: z.string().optional(),
   category: z.string().min(1, "Category is required."),
   content: z.string().min(10, "Content is required."),
   order: z.coerce.number().default(0),
@@ -54,6 +55,15 @@ interface PageCategory {
     name: string;
 }
 
+const createSlug = (title: string) => {
+    return title
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
+}
+
 export default function AdminPages() {
   const { db } = useFirebase();
   const { toast } = useToast();
@@ -67,6 +77,7 @@ export default function AdminPages() {
     resolver: zodResolver(pageSchema),
     defaultValues: {
       title: "",
+      slug: "",
       category: "",
       content: "",
       order: 0,
@@ -79,18 +90,13 @@ export default function AdminPages() {
         return;
     }
 
-    // A simpler query to fetch all pages, then we sort client-side
-    const q = query(collection(db, "pages"));
+    const q = query(collection(db, "pages"), orderBy("category"), orderBy("order"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
       let pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
       );
-
-      // Sort client-side to ensure all documents are displayed
-      pagesData.sort((a, b) => (a.category || "").localeCompare(b.category || "") || (a.order || 0) - (b.order || 0));
-
       setPages(pagesData);
-      setLoading(false); 
+      setLoading(false);
     }, (error) => {
         console.error("Error fetching pages:", error);
         toast({ variant: "destructive", title: "Error", description: "Could not fetch pages." });
@@ -113,10 +119,13 @@ export default function AdminPages() {
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
+
+    const slug = data.slug || createSlug(data.title);
     
     let promise;
     const dataToSave = {
         ...data,
+        slug,
         updatedAt: serverTimestamp(),
     };
 
