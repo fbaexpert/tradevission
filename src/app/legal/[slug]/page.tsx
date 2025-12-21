@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/shared/logo";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
-import { useRouter } from 'next/navigation';
 
 
 interface PageContent {
@@ -21,22 +21,25 @@ interface PageContent {
     createdAt?: Timestamp;
 }
 
-export default function LegalPage({ params }: { params: { slug: string } }) {
+export default function LegalPage() {
   const { db } = useFirebase();
   const router = useRouter();
+  const params = useParams();
+  const slug = params.slug as string;
+
   const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!db || !params.slug) return;
+    if (!db || !slug) return;
 
     const fetchPage = async () => {
       setLoading(true);
       setError(null);
       try {
         // Use the page ID (slug from URL) to fetch the document
-        const docRef = doc(db, "pages", params.slug);
+        const docRef = doc(db, "pages", slug);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -53,7 +56,7 @@ export default function LegalPage({ params }: { params: { slug: string } }) {
     };
 
     fetchPage();
-  }, [db, params.slug]);
+  }, [db, slug]);
 
   const lastUpdated = pageContent?.updatedAt || pageContent?.createdAt;
 
