@@ -31,6 +31,7 @@ import { LoaderCircle, FileText, PlusCircle, Trash2, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDistanceToNow } from 'date-fns';
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 
 const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
@@ -301,5 +302,3 @@ export default function AdminPages() {
     </div>
   );
 }
-
-    
