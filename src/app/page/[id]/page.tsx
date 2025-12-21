@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,13 +19,14 @@ interface PageContent {
     createdAt?: Timestamp;
 }
 
-export default function DynamicPage({ params }: { params: { id: string } }) {
+export default function DynamicPage() {
   const { db } = useFirebase();
+  const params = useParams();
+  const id = params.id as string;
+
   const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const { id } = params;
 
   useEffect(() => {
     if (!db || !id) return;
