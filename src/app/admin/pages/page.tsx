@@ -83,11 +83,11 @@ export default function AdminPages() {
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
       );
       setPages(pagesData);
-      setLoading(false); // Set loading to false once we get data or an empty snapshot
+      setLoading(false); 
     }, (error) => {
         console.error("Error fetching pages:", error);
         toast({ variant: "destructive", title: "Error", description: "Could not fetch pages." });
-        setLoading(false); // Also set loading to false on error
+        setLoading(false);
     });
 
     const settingsDocRef = doc(db, "system", "settings");
@@ -140,9 +140,8 @@ export default function AdminPages() {
         title: page.title,
         category: page.category,
         order: page.order,
-        content: "Loading content...", // Placeholder
+        content: "Loading content...",
     });
-    // Fetch full content for editing
     const pageDocRef = doc(db, "pages", page.id);
     getDoc(pageDocRef).then(docSnap => {
         if (docSnap.exists()) {
