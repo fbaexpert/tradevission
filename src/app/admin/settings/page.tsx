@@ -148,6 +148,8 @@ const COLLECTIONS_TO_DELETE = [
     "withdrawals",
 ];
 
+const DEFAULT_CATEGORIES = ["Legal", "Policy", "About Us", "Privacy", "Terms", "Help"];
+
 
 export default function AdminSettingsPage() {
     const { user } = useAuth();
@@ -258,6 +260,35 @@ export default function AdminSettingsPage() {
             setIsCategorySaving(false);
         }
     }
+
+    const handleAddDefaultCategories = async () => {
+        if (!db) return;
+        setIsCategorySaving(true);
+        try {
+            const existingCategoryNames = new Set(pageCategories.map(c => c.name.toLowerCase()));
+            const categoriesToAdd = DEFAULT_CATEGORIES.filter(c => !existingCategoryNames.has(c.toLowerCase()));
+
+            if (categoriesToAdd.length === 0) {
+                toast({ title: "No New Categories", description: "All default categories already exist." });
+                setIsCategorySaving(false);
+                return;
+            }
+
+            const batch = writeBatch(db);
+            categoriesToAdd.forEach(name => {
+                const newCatRef = doc(collection(db, "categories"));
+                batch.set(newCatRef, { name, createdAt: serverTimestamp() });
+            });
+            await batch.commit();
+
+            toast({ title: "Default Categories Added", description: `${categoriesToAdd.length} new categories were added.` });
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error", description: "Could not add default categories." });
+        } finally {
+            setIsCategorySaving(false);
+        }
+    };
+
 
     const handleDeleteCategory = async (categoryId: string) => {
         if (!db) return;
@@ -476,6 +507,9 @@ export default function AdminSettingsPage() {
                                     {isCategorySaving ? <LoaderCircle className="animate-spin" /> : <PlusCircle />}
                                 </Button>
                             </div>
+                             <Button onClick={handleAddDefaultCategories} variant="outline" size="sm" disabled={isCategorySaving}>
+                                Add Default Categories
+                            </Button>
                             <div className="space-y-2">
                                 {pageCategories.map((category) => (
                                     <div key={category.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
