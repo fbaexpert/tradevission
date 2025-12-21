@@ -49,10 +49,16 @@ interface WebsitePage {
   updatedAt?: Timestamp;
 }
 
+interface PageCategory {
+    id: string;
+    name: string;
+}
+
 export default function AdminPages() {
   const { db } = useFirebase();
   const { toast } = useToast();
   const [pages, setPages] = useState<WebsitePage[]>([]);
+  const [pageCategories, setPageCategories] = useState<PageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
@@ -79,8 +85,16 @@ export default function AdminPages() {
       setLoading(false);
     });
 
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
+        if (doc.exists()) {
+            setPageCategories(doc.data().pageCategories || []);
+        }
+    });
+
     return () => {
       unsubscribePages();
+      unsubscribeCategories();
     };
   }, [db]);
 
@@ -89,16 +103,17 @@ export default function AdminPages() {
     setIsSubmitting(true);
     
     let promise;
+    const dataToSave = {
+        ...data,
+        updatedAt: serverTimestamp(),
+    };
+
     if (editingPage) {
-        promise = updateDoc(doc(db, "pages", editingPage.id), {
-            ...data,
-            updatedAt: serverTimestamp(),
-        });
+        promise = updateDoc(doc(db, "pages", editingPage.id), dataToSave);
     } else {
         promise = addDoc(collection(db, "pages"), {
-            ...data,
+            ...dataToSave,
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
         });
     }
 
@@ -168,10 +183,19 @@ export default function AdminPages() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Input 
-                    id="category" 
-                    {...form.register("category")}
-                    placeholder="e.g. Legal, Help, About"
+                <Controller
+                  name="category"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger id="category"><SelectValue placeholder="Select a category"/></SelectTrigger>
+                        <SelectContent>
+                            {pageCategories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                  )}
                 />
                  {form.formState.errors.category && <p className="text-red-500 text-sm">{form.formState.errors.category.message}</p>}
               </div>
