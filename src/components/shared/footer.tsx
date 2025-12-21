@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, where, doc } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 
 interface DynamicPage {
