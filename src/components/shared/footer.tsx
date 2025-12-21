@@ -11,7 +11,9 @@ import { useFirebase } from "@/lib/firebase/provider";
 interface DynamicPage {
   id: string;
   title: string;
+  slug: string;
   category: string;
+  order: number;
 }
 
 interface PageCategory {
@@ -40,8 +42,8 @@ export function Footer() {
   useEffect(() => {
     if (!db) return;
     
-    // Fetch only active pages
-    const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true));
+    // Fetch only active pages, sorted by order
+    const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true), orderBy("order", "asc"));
     const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
         const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
         setPages(pagesData);
@@ -93,7 +95,7 @@ export function Footer() {
                       <h4 className="font-bold text-white mb-4">{category.name}</h4>
                       <nav className="flex flex-col gap-2">
                           {category.pages.map(page => (
-                              <Link key={page.id} href={`/legal/${page.id}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                              <Link key={page.id} href={`/page/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                 {page.title}
                               </Link>
                           ))}

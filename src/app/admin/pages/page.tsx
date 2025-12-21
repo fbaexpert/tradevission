@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   category: z.string().min(1, "Category is required."),
+  order: z.coerce.number().default(0),
   content: z.string().min(10, "Content is required."),
   isActive: z.boolean().default(true),
 });
@@ -47,6 +48,7 @@ interface WebsitePage {
   id: string;
   title: string;
   category: string;
+  order: number;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
   isActive: boolean;
@@ -76,6 +78,7 @@ export default function AdminPages() {
     defaultValues: {
       title: "",
       category: "",
+      order: 0,
       content: "",
       isActive: true,
     },
@@ -87,7 +90,7 @@ export default function AdminPages() {
         return;
     }
 
-    const q = query(collection(db, "pages"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "pages"), orderBy("order", "asc"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
       let pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
@@ -197,7 +200,7 @@ export default function AdminPages() {
 
   const handleCancelEdit = () => {
     setEditingPage(null);
-    form.reset({ title: "", category: "", content: "", isActive: true });
+    form.reset({ title: "", category: "", order: 0, content: "", isActive: true });
   }
 
   const handleDelete = async (pageId: string) => {
@@ -225,7 +228,7 @@ export default function AdminPages() {
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="title">Page Title</Label>
                 <Input id="title" {...form.register("title")} />
@@ -251,6 +254,11 @@ export default function AdminPages() {
                   )}
                 />
                  {form.formState.errors.category && <p className="text-red-500 text-sm">{form.formState.errors.category.message}</p>}
+              </div>
+              <div className="space-y-2">
+                  <Label htmlFor="order">Display Order</Label>
+                  <Input id="order" type="number" {...form.register("order")} />
+                  {form.formState.errors.order && <p className="text-red-500 text-sm">{form.formState.errors.order.message}</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -285,7 +293,7 @@ export default function AdminPages() {
             <FileText /> Existing Pages
           </CardTitle>
           <CardDescription>
-            List of all created pages.
+            List of all created pages, sorted by display order.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -298,6 +306,7 @@ export default function AdminPages() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Order</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Status</TableHead>
@@ -308,6 +317,7 @@ export default function AdminPages() {
                 <TableBody>
                   {pages.map((page) => (
                     <TableRow key={page.id}>
+                      <TableCell>{page.order}</TableCell>
                       <TableCell className="font-medium">{page.title}</TableCell>
                       <TableCell>{page.category}</TableCell>
                       <TableCell>
@@ -357,7 +367,7 @@ export default function AdminPages() {
         <DialogHeader>
           <DialogTitle>Manage Categories</DialogTitle>
           <DialogDescription>
-            Add a new category or delete existing ones.
+            Add or delete categories for your pages.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
