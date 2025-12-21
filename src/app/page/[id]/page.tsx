@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,10 +17,12 @@ interface PageContent {
     title: string;
     content: string;
     createdAt?: Timestamp;
+    updatedAt?: Timestamp;
 }
 
 export default function DynamicPage() {
   const { db } = useFirebase();
+  const router = useRouter();
   const params = useParams();
   const id = params.id as string;
 
@@ -54,6 +56,8 @@ export default function DynamicPage() {
     fetchPage();
   }, [db, id]);
 
+  const lastUpdated = pageContent?.updatedAt || pageContent?.createdAt;
+
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col">
       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
@@ -64,8 +68,8 @@ export default function DynamicPage() {
           </h1>
         </Link>
         <nav>
-          <Button asChild variant="outline">
-            <Link href="/"><ArrowLeft className="mr-2" /> Back to Home</Link>
+          <Button variant="outline" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2" /> Back
           </Button>
         </nav>
       </header>
@@ -91,9 +95,9 @@ export default function DynamicPage() {
             <Card className="border-border/20 shadow-lg shadow-primary/5">
               <CardHeader>
                 <CardTitle className="text-3xl font-bold text-white">{pageContent.title}</CardTitle>
-                {pageContent.createdAt && (
+                {lastUpdated && (
                   <CardDescription>
-                    Published on: {format(pageContent.createdAt.toDate(), "PPP")}
+                    Last Updated: {format(lastUpdated.toDate(), "PPP")}
                   </CardDescription>
                 )}
               </CardHeader>

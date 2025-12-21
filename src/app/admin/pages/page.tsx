@@ -9,6 +9,7 @@ import {
   collection,
   onSnapshot,
   addDoc,
+  updateDoc,
   deleteDoc,
   doc,
   serverTimestamp,
@@ -25,15 +26,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoaderCircle, FileText, PlusCircle, Trash2 } from "lucide-react";
+import { LoaderCircle, FileText, PlusCircle, Trash2, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-
-const pageCategories = ['Legal', 'Privacy', 'Terms', 'Help', 'Policies'] as const;
+import { formatDistanceToNow } from 'date-fns';
 
 const pageSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
-  category: z.enum(pageCategories),
+  category: z.string().min(1, "Category is required."),
   content: z.string().min(10, "Content is required."),
 });
 
@@ -44,20 +43,28 @@ interface WebsitePage {
   title: string;
   category: string;
   createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+interface PageCategory {
+    id: string;
+    name: string;
 }
 
 export default function AdminPages() {
   const { db } = useFirebase();
   const { toast } = useToast();
   const [pages, setPages] = useState<WebsitePage[]>([]);
+  const [categories, setCategories] = useState<PageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
 
   const form = useForm<PageFormData>({
     resolver: zodResolver(pageSchema),
     defaultValues: {
       title: "",
-      category: 'Legal',
+      category: "",
       content: "",
     },
   });
@@ -66,7 +73,7 @@ export default function AdminPages() {
     if (!db) return;
 
     const q = query(collection(db, "pages"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribePages = onSnapshot(q, (snapshot) => {
       const pagesData = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
       );
@@ -74,26 +81,70 @@ export default function AdminPages() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const settingsDocRef = doc(db, "system", "settings");
+    const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setCategories(data.pageCategories || []);
+      }
+    });
+
+    return () => {
+      unsubscribePages();
+      unsubscribeCategories();
+    };
   }, [db]);
 
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
+    
+    let promise;
+    if (editingPage) {
+        promise = updateDoc(doc(db, "pages", editingPage.id), {
+            ...data,
+            updatedAt: serverTimestamp(),
+        });
+    } else {
+        promise = addDoc(collection(db, "pages"), {
+            ...data,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+    }
 
     try {
-      await addDoc(collection(db, "pages"), {
-        ...data,
-        createdAt: serverTimestamp(),
-      });
-      toast({ title: "Page Created", description: `"${data.title}" has been successfully added.` });
-      form.reset();
+      await promise;
+      toast({ title: `Page ${editingPage ? 'Updated' : 'Created'}`, description: `"${data.title}" has been successfully saved.` });
+      handleCancelEdit();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleEdit = (page: WebsitePage) => {
+    setEditingPage(page);
+    form.reset({
+        title: page.title,
+        category: page.category,
+        content: "Loading content...", // Placeholder
+    });
+    // Fetch full content for editing
+    const pageDocRef = doc(db, "pages", page.id);
+    getDoc(pageDocRef).then(docSnap => {
+        if (docSnap.exists()) {
+            form.reset(docSnap.data() as PageFormData);
+        }
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  const handleCancelEdit = () => {
+    setEditingPage(null);
+    form.reset({ title: "", category: "", content: "" });
+  }
 
   const handleDelete = async (pageId: string) => {
     if (!db) return;
@@ -110,10 +161,11 @@ export default function AdminPages() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white font-bold">
-            <PlusCircle /> Create New Page
+            {editingPage ? <Edit /> : <PlusCircle />}
+            {editingPage ? "Edit Page" : "Create New Page"}
           </CardTitle>
           <CardDescription>
-            Add new pages that will appear in your website's footer.
+             {editingPage ? `You are editing "${editingPage.title}".` : "Add new pages that will appear on your website."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -131,26 +183,30 @@ export default function AdminPages() {
                   control={form.control}
                   render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
                       <SelectContent>
-                        {pageCategories.map(cat => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        {categories.map(cat => (
+                          <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   )}
                 />
+                 {form.formState.errors.category && <p className="text-red-500 text-sm">{form.formState.errors.category.message}</p>}
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="content">Content</Label>
-              <Textarea id="content" {...form.register("content")} rows={8} />
+              <Textarea id="content" {...form.register("content")} rows={10} />
               {form.formState.errors.content && <p className="text-red-500 text-sm">{form.formState.errors.content.message}</p>}
             </div>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <LoaderCircle className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
-              Create Page
-            </Button>
+            <div className="flex items-center gap-4">
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <LoaderCircle className="animate-spin mr-2" /> : (editingPage ? <Edit className="mr-2"/> : <PlusCircle className="mr-2"/>)}
+                {editingPage ? "Update Page" : "Create Page"}
+              </Button>
+              {editingPage && <Button variant="outline" type="button" onClick={handleCancelEdit}>Cancel</Button>}
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -176,7 +232,7 @@ export default function AdminPages() {
                   <TableRow>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Created At</TableHead>
+                    <TableHead>Last Updated</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -184,11 +240,14 @@ export default function AdminPages() {
                   {pages.map((page) => (
                     <TableRow key={page.id}>
                       <TableCell className="font-medium">{page.title}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{page.category}</Badge>
+                      <TableCell>{page.category}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {page.updatedAt ? formatDistanceToNow(page.updatedAt.toDate(), { addSuffix: true }) : (page.createdAt ? formatDistanceToNow(page.createdAt.toDate(), { addSuffix: true }) : 'N/A')}
                       </TableCell>
-                      <TableCell>{page.createdAt ? new Date(page.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell className="text-right">
+                         <Button variant="ghost" size="icon" onClick={() => handleEdit(page)}>
+                           <Edit className="h-4 w-4" />
+                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="text-destructive">
