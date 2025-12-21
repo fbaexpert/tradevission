@@ -119,9 +119,11 @@ const defaultSettings: AppSettings = {
     ],
     pageCategories: [
         { id: nanoid(), name: "Legal" },
-        { id: nanoid(), name: "Policies" },
+        { id: nanoid(), name: "Privacy" },
+        { id: nanoid(), name: "Terms" },
         { id: nanoid(), name: "Help" },
-        { id: nanoid(), name: "About" },
+        { id: nanoid(), name: "Policies" },
+        { id: nanoid(), name: "About Us" },
     ],
     depositBoost: {
         enabled: false,
