@@ -74,7 +74,10 @@ export default function AdminPages() {
   });
 
   useEffect(() => {
-    if (!db) return;
+    if (!db) {
+        setLoading(false);
+        return;
+    }
 
     const q = query(collection(db, "pages"), orderBy("category"), orderBy("order"));
     const unsubscribePages = onSnapshot(q, (snapshot) => {
@@ -82,7 +85,11 @@ export default function AdminPages() {
         (doc) => ({ id: doc.id, ...doc.data() } as WebsitePage)
       );
       setPages(pagesData);
-      setLoading(false);
+      setLoading(false); // Set loading to false once we get data or an empty snapshot
+    }, (error) => {
+        console.error("Error fetching pages:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch pages." });
+        setLoading(false); // Also set loading to false on error
     });
 
     const settingsDocRef = doc(db, "system", "settings");
@@ -96,7 +103,7 @@ export default function AdminPages() {
       unsubscribePages();
       unsubscribeCategories();
     };
-  }, [db]);
+  }, [db, toast]);
 
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
@@ -129,6 +136,7 @@ export default function AdminPages() {
   };
 
   const handleEdit = (page: WebsitePage) => {
+    if(!db) return;
     setEditingPage(page);
     form.reset({
         title: page.title,
