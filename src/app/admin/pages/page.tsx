@@ -150,6 +150,7 @@ export default function AdminPages() {
         updatedAt: serverTimestamp(),
     };
 
+    let promise;
     if (editingPage) {
         promise = updateDoc(doc(db, "pages", editingPage.id), dataToSave);
     } else {
