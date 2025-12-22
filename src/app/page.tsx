@@ -2,11 +2,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus, FileText } from "lucide-react";
+import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
-import { useEffect, useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -24,10 +24,23 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 );
 
 export default function LandingPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [loginHref, setLoginHref] = useState("/login");
 
   useEffect(() => {
+    // --- Password Reset Link Interceptor ---
+    // This catches password reset links that incorrectly point to the homepage.
+    const mode = searchParams.get('mode');
+    const oobCode = searchParams.get('oobCode');
+    
+    if (mode === 'resetPassword' && oobCode) {
+        // Redirect to the correct password reset page, preserving the query parameters.
+        router.push(`/reset-password?${searchParams.toString()}`);
+        return; // Stop further execution in this effect
+    }
+
+    // --- Referral Code Logic ---
     const refId = searchParams.get('ref');
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
@@ -38,7 +51,7 @@ export default function LandingPage() {
             setLoginHref(`/login?ref=${storedRefId}`);
         }
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   return (
     <div className="bg-background text-foreground flex flex-col">
