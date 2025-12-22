@@ -186,113 +186,115 @@ export default function TeamPage() {
   const totalTeamCommission = (userData?.totalReferralBonus || 0) + (userData?.totalTeamBonus || 0);
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 space-y-8">
-      <Card className="border-border/20 shadow-lg shadow-primary/5 bg-transparent">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3 text-3xl font-bold text-white font-headline">
-            <Users2 /> Your Team
-          </CardTitle>
-          <CardDescription>
-            Track your referrals and bonuses in real-time.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              title="Team Members"
-              value={String(userData?.totalTeamMembers || 0)}
-              icon={Users2}
-              iconColor="text-yellow-400"
-              gradient="bg-gradient-to-br from-yellow-900/40 via-background to-background"
-            />
-             <StatCard
-              title="Team Commission"
-              value={`$${totalTeamCommission.toFixed(2)}`}
-              icon={DollarSign}
-              iconColor="text-green-400"
-              gradient="bg-gradient-to-br from-green-900/40 via-background to-background"
-            />
-            <StatCard
-              title="Referral Bonus"
-              value={`$${(userData?.totalReferralBonus || 0).toFixed(2)}`}
-              icon={BarChart}
-              iconColor="text-purple-400"
-              gradient="bg-gradient-to-br from-purple-900/40 via-background to-background"
-            />
-            <StatCard
-              title="Daily Team Bonus"
-              value={`$${(userData?.totalTeamBonus || 0).toFixed(2)}`}
-              icon={Zap}
-              iconColor="text-blue-400"
-              gradient="bg-gradient-to-br from-blue-900/40 via-background to-background"
-            />
+    <div className="p-4 sm:p-6 md:p-8">
+      <div className="container mx-auto max-w-6xl space-y-8">
+        <Card className="border-border/20 shadow-lg shadow-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-3xl font-bold text-white font-headline">
+              <Users2 /> Your Team
+            </CardTitle>
+            <CardDescription>
+              Track your referrals and bonuses in real-time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                title="Team Members"
+                value={String(userData?.totalTeamMembers || 0)}
+                icon={Users2}
+                iconColor="text-yellow-400"
+                gradient="bg-gradient-to-br from-yellow-900/40 via-background to-background"
+              />
+               <StatCard
+                title="Team Commission"
+                value={`$${totalTeamCommission.toFixed(2)}`}
+                icon={DollarSign}
+                iconColor="text-green-400"
+                gradient="bg-gradient-to-br from-green-900/40 via-background to-background"
+              />
+              <StatCard
+                title="Referral Bonus"
+                value={`$${(userData?.totalReferralBonus || 0).toFixed(2)}`}
+                icon={BarChart}
+                iconColor="text-purple-400"
+                gradient="bg-gradient-to-br from-purple-900/40 via-background to-background"
+              />
+              <StatCard
+                title="Daily Team Bonus"
+                value={`$${(userData?.totalTeamBonus || 0).toFixed(2)}`}
+                icon={Zap}
+                iconColor="text-blue-400"
+                gradient="bg-gradient-to-br from-blue-900/40 via-background to-background"
+              />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <div className="space-y-4">
+          <div className="relative p-6 rounded-lg border-2 border-primary/50 bg-gradient-to-br from-primary/20 via-background to-background overflow-hidden group">
+              <div className="absolute -top-12 -right-12 text-primary/10 group-hover:text-primary/20 transition-colors duration-500">
+                  <Gift size={160} strokeWidth={1} />
+              </div>
+               <div className="relative z-10 flex items-start gap-4">
+                  <div className="p-3 rounded-full bg-primary/20 border border-primary/30">
+                    <Gift className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-white text-lg">First Deposit Bonus (20%)</h3>
+                      <p className="text-sm text-muted-foreground mt-1">When your directly referred member (Level 1) makes their first deposit, you'll receive a 20% bonus of their deposit amount added directly to your balance.</p>
+                  </div>
+               </div>
           </div>
-        </CardContent>
-      </Card>
-      
-      <div className="space-y-4">
-        <div className="relative p-6 rounded-lg border-2 border-primary/50 bg-gradient-to-br from-primary/20 via-background to-background overflow-hidden group">
-            <div className="absolute -top-12 -right-12 text-primary/10 group-hover:text-primary/20 transition-colors duration-500">
-                <Gift size={160} strokeWidth={1} />
-            </div>
-             <div className="relative z-10 flex items-start gap-4">
-                <div className="p-3 rounded-full bg-primary/20 border border-primary/30">
-                  <Gift className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                    <h3 className="font-bold text-white text-lg">First Deposit Bonus (20%)</h3>
-                    <p className="text-sm text-muted-foreground mt-1">When your directly referred member (Level 1) makes their first deposit, you'll receive a 20% bonus of their deposit amount added directly to your balance.</p>
-                </div>
-             </div>
-        </div>
-         <div className="relative p-6 rounded-lg border-2 border-green-500/50 bg-gradient-to-br from-green-900/40 via-background to-background overflow-hidden group">
-            <div className="absolute -top-12 -right-12 text-green-400/10 group-hover:text-green-400/20 transition-colors duration-500">
-                <Zap size={160} strokeWidth={1} />
-            </div>
-            <div className="relative z-10 flex items-start gap-4">
-                 <div className="p-3 rounded-full bg-green-500/20 border border-green-500/30">
-                    <Zap className="h-6 w-6 text-green-400" />
-                 </div>
-                <div>
-                    <h3 className="font-bold text-white text-lg">Daily Team Bonus</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Every time a referred member completes their daily task, you'll earn a bonus based on their daily profit. The bonus is 10% for Level 1 members and 2% for Level 2 members.</p>
-                </div>
-            </div>
-        </div>
-    </div>
+           <div className="relative p-6 rounded-lg border-2 border-green-500/50 bg-gradient-to-br from-green-900/40 via-background to-background overflow-hidden group">
+              <div className="absolute -top-12 -right-12 text-green-400/10 group-hover:text-green-400/20 transition-colors duration-500">
+                  <Zap size={160} strokeWidth={1} />
+              </div>
+              <div className="relative z-10 flex items-start gap-4">
+                   <div className="p-3 rounded-full bg-green-500/20 border border-green-500/30">
+                      <Zap className="h-6 w-6 text-green-400" />
+                   </div>
+                  <div>
+                      <h3 className="font-bold text-white text-lg">Daily Team Bonus</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Every time a referred member completes their daily task, you'll earn a bonus based on their daily profit. The bonus is 10% for Level 1 members and 2% for Level 2 members.</p>
+                  </div>
+              </div>
+          </div>
+      </div>
 
-      <Card className="border-border/20 shadow-lg shadow-primary/5 mt-8">
-        <CardHeader>
-           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <CardTitle className="text-xl font-bold text-white">Team Members</CardTitle>
-              <CardDescription>
-                A list of all users you have referred directly and indirectly.
-              </CardDescription>
+        <Card className="border-border/20 shadow-lg shadow-primary/5 mt-8">
+          <CardHeader>
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <CardTitle className="text-xl font-bold text-white">Team Members</CardTitle>
+                <CardDescription>
+                  A list of all users you have referred directly and indirectly.
+                </CardDescription>
+              </div>
+              <Input
+                placeholder="Search by name or email..."
+                className="max-w-full md:max-w-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
-            <Input
-              placeholder="Search by name or email..."
-              className="max-w-full md:max-w-sm"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-            <Tabs defaultValue="level1">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="level1">Level 1 ({l1Members.length})</TabsTrigger>
-                    <TabsTrigger value="level2">Level 2 ({l2Members.length})</TabsTrigger>
-                </TabsList>
-                <TabsContent value="level1">
-                    {renderTeamTable(l1Members, searchTerm)}
-                </TabsContent>
-                <TabsContent value="level2">
-                     {renderTeamTable(l2Members, searchTerm)}
-                </TabsContent>
-            </Tabs>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+              <Tabs defaultValue="level1">
+                  <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="level1">Level 1 ({l1Members.length})</TabsTrigger>
+                      <TabsTrigger value="level2">Level 2 ({l2Members.length})</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="level1">
+                      {renderTeamTable(l1Members, searchTerm)}
+                  </TabsContent>
+                  <TabsContent value="level2">
+                       {renderTeamTable(l2Members, searchTerm)}
+                  </TabsContent>
+              </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
