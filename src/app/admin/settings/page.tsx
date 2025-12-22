@@ -508,8 +508,8 @@ export default function AdminSettingsPage() {
                         <Label className="text-base flex items-center gap-2"><Zap/> Super Bonus Tiers</Label>
                         <p className="text-sm text-muted-foreground">Reward users with a one-time bonus when they reach a certain number of referrals.</p>
                         <div className="space-y-3 pt-4 border-t">
-                            {settings.superBonusTiers.map((tier) => (
-                                <div key={tier.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
+                            {settings.superBonusTiers.map((tier, index) => (
+                                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
                                     <div className="space-y-2">
                                         <Label htmlFor={`tier-referrals-${tier.id}`}>Referral Count</Label>
                                         <Input id={`tier-referrals-${tier.id}`} type="number" value={tier.referrals} onChange={(e) => handleTierChange(tier.id, 'referrals', Number(e.target.value))} />
@@ -529,8 +529,8 @@ export default function AdminSettingsPage() {
                         <Label className="text-base flex items-center gap-2"><Tag/> Plan Tags</Label>
                         <p className="text-sm text-muted-foreground">Create tags that can be assigned to investment plans (e.g., 'Popular', 'Limited').</p>
                         <div className="space-y-3 pt-4 border-t">
-                            {settings.planTags.map((tag) => (
-                                <div key={tag.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
+                            {settings.planTags.map((tag, index) => (
+                                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
                                     <div className="space-y-2">
                                         <Label htmlFor={`tag-name-${tag.id}`}>Tag Name</Label>
                                         <Input id={`tag-name-${tag.id}`} value={tag.name} onChange={(e) => handleTagChange(tag.id, 'name', e.target.value)} />
