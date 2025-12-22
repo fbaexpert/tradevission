@@ -238,7 +238,7 @@ export default function AdminSettingsPage() {
   
   const handleDeletePage = async (page: PageData) => {
     try {
-      await deletePageAction(page.slug);
+      await deletePageAction(page.id);
       toast({
         title: "Page Deleted",
         description: `The "${page.title}" page has been successfully deleted.`,
@@ -532,7 +532,7 @@ export default function AdminSettingsPage() {
                                </div>
                                <div className="flex items-center gap-2">
                                 <Button asChild variant="outline" size="sm">
-                                    <Link href={`/admin/pages/edit/${page.slug}`}>
+                                    <Link href={`/admin/pages/edit/${page.id}`}>
                                         <Edit className="mr-2 h-4 w-4" /> Edit
                                     </Link>
                                 </Button>

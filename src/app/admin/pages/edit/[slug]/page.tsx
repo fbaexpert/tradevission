@@ -32,7 +32,7 @@ interface PageContent {
 export default function EditPage() {
     const router = useRouter();
     const params = useParams();
-    const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
+    const pageId = Array.isArray(params.slug) ? params.slug[0] : params.slug;
 
     const { db } = getFirebase();
     const { toast } = useToast();
@@ -48,11 +48,11 @@ export default function EditPage() {
     });
 
     useEffect(() => {
-        if (!db || !slug) return;
+        if (!db || !pageId) return;
         
         const fetchPage = async () => {
             setLoading(true);
-            const pageRef = doc(db, "websitePages", slug);
+            const pageRef = doc(db, "websitePages", pageId);
             const docSnap = await getDoc(pageRef);
 
             if (docSnap.exists()) {
@@ -63,12 +63,12 @@ export default function EditPage() {
         };
 
         fetchPage();
-    }, [db, slug, form]);
+    }, [db, pageId, form]);
 
     const onSubmit = (data: PageFormData) => {
         startTransition(async () => {
             try {
-                await updatePageAction(slug, data);
+                await updatePageAction(pageId, data);
                 toast({
                     title: "Page Updated",
                     description: `The "${data.title}" page has been successfully saved.`,
@@ -98,7 +98,7 @@ export default function EditPage() {
                     <div>
                         <CardTitle className="flex items-center gap-2">
                             <FileText />
-                            Edit Page: {form.getValues('title') || slug}
+                            Edit Page: {form.getValues('title') || pageId}
                         </CardTitle>
                         <CardDescription>Update the title and content for this page.</CardDescription>
                     </div>
