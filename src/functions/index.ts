@@ -186,7 +186,6 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
  * This is a robust function that handles various cleanup tasks.
  */
 export const deleteUserAccount = functions.runWith({timeoutSeconds: 120, memory: '512MB'}).https.onCall(async (data, context) => {
-    // 1. Authenticate the admin
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
     }
@@ -196,33 +195,35 @@ export const deleteUserAccount = functions.runWith({timeoutSeconds: 120, memory:
         throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
     }
 
+    try {
+        await admin.auth().deleteUser(uid);
+        // The onDelete trigger will handle the rest of the cleanup.
+        functions.logger.log(`Successfully triggered deletion for auth user: ${uid}`);
+        return { success: true, message: `Successfully deleted user ${uid} and all associated data.` };
+
+    } catch (error: any) {
+        functions.logger.error(`Error during full deletion of user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', error.message || 'A failure occurred during the account deletion process.');
+    }
+});
+
+/**
+ * Triggered when a user is deleted from Firebase Authentication.
+ * Cleans up all associated data from Firestore and Storage.
+ */
+export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (user) => {
+    const uid = user.uid;
+    functions.logger.log(`Starting cleanup for deleted user: ${uid}`);
+
     const db = admin.firestore();
     const bucket = admin.storage().bucket();
 
     try {
-        // 2. Delete Firebase Authentication user
-        try {
-            await admin.auth().deleteUser(uid);
-            functions.logger.log(`Successfully deleted auth user: ${uid}`);
-        } catch (error: any) {
-            if (error.code === 'auth/user-not-found') {
-              functions.logger.warn(`Auth user ${uid} not found, but proceeding with DB cleanup.`);
-            } else {
-              throw error; // Re-throw other auth errors to be caught by the client
-            }
-        }
-
-        // 3. Delete all related Firestore documents
+        // 1. Delete all related Firestore documents
         const collectionsToDelete = [
-            'userPlans',
-            'deposits',
-            'withdrawals',
-            'cpmWithdrawals',
-            'supportTickets',
-            'feedback',
-            'kycSubmissions',
-            'cpm_purchase_logs',
-            'activityLogs',
+            'userPlans', 'deposits', 'withdrawals', 'cpmWithdrawals',
+            'supportTickets', 'feedback', 'kycSubmissions', 
+            'cpm_purchase_logs', 'activityLogs'
         ];
 
         const mainBatch = db.batch();
@@ -239,7 +240,7 @@ export const deleteUserAccount = functions.runWith({timeoutSeconds: 120, memory:
         await mainBatch.commit();
         functions.logger.log(`Main Firestore documents deleted for user: ${uid}`);
         
-        // 4. Delete all subcollections inside the user document
+        // 2. Delete all subcollections inside the user document
         const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
         for (const sub of subcollections) {
             const subcollectionRef = db.collection('users').doc(uid).collection(sub);
@@ -252,18 +253,15 @@ export const deleteUserAccount = functions.runWith({timeoutSeconds: 120, memory:
             }
         }
         
-        // 5. Delete all files from Firebase Storage
+        // 3. Delete all files from Firebase Storage
         const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
         for (const path of storagePaths) {
-            await bucket.deleteFiles({ prefix: path });
+            await bucket.deleteFiles({ prefix: path, force: true });
         }
         functions.logger.log(`Storage files deleted for user: ${uid}`);
 
-        return { success: true, message: `Successfully deleted user ${uid} and all associated data.` };
-
     } catch (error: any) {
-        functions.logger.error(`Error during full deletion of user ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', error.message || 'A failure occurred during the account deletion process.');
+        functions.logger.error(`Error during cleanup of user ${uid}:`, error);
     }
 });
 
