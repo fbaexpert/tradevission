@@ -4,9 +4,7 @@ import { Logo } from "./logo";
 import { Mail } from "lucide-react";
 import { collection, query, orderBy, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { getFirebase } from "@/lib/firebase/config";
-
-// This line disables data caching for the footer, ensuring updates are always fresh.
-export const revalidate = 0;
+import { unstable_noStore as noStore } from 'next/cache';
 
 interface DynamicPage {
   id: string;
@@ -34,6 +32,7 @@ const defaultFooterSettings: FooterSettings = {
 };
 
 async function getFooterData() {
+  noStore(); // This function disables caching for this fetch operation.
   try {
     const { db } = getFirebase();
 
