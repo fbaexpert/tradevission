@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { useEffect, useState } from "react";
 import { useSearchParams } from 'next/navigation';
+import Loader from "@/components/shared/loader";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -22,14 +24,23 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
   </div>
 );
 
-
 export default function LandingPage() {
   const [loginHref, setLoginHref] = useState("/login");
+  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true);
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // This logic handles storing the referral ID from the URL
-    // It is client-side and separate from the password reset flow, which is now handled by middleware.
+    // --- PASSWORD RESET REDIRECT ---
+    const mode = searchParams.get('mode');
+    const oobCode = searchParams.get('oobCode');
+
+    if (mode === 'resetPassword' && oobCode) {
+      // Use window.location.replace for a hard, immediate redirect that doesn't push to history.
+      window.location.replace(`/reset-password?mode=${mode}&oobCode=${oobCode}`);
+      return; // Stop further execution
+    }
+
+    // --- REFERRAL CODE LOGIC ---
     const refId = searchParams.get('ref');
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
@@ -40,8 +51,18 @@ export default function LandingPage() {
             setLoginHref(`/login?ref=${storedRefId}`);
         }
     }
+
+    // If we reach here, it means we are not redirecting.
+    setIsCheckingRedirect(false);
+
   }, [searchParams]);
 
+  // While checking, show a loader to prevent the landing page from flashing.
+  if (isCheckingRedirect) {
+    return <Loader />;
+  }
+
+  // --- NORMAL LANDING PAGE CONTENT ---
   return (
       <div className="bg-background text-foreground flex flex-col">
       {/* Header */}
