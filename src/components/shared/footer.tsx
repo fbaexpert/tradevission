@@ -1,12 +1,8 @@
-
-"use client";
-
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, onSnapshot, query, orderBy, where, doc } from "firebase/firestore";
-import { useFirebase } from "@/lib/firebase/provider";
+import { collection, query, orderBy, where, getDocs } from "firebase/firestore";
+import { getFirebase } from "@/lib/firebase/config";
 
 interface DynamicPage {
   id: string;
@@ -33,48 +29,46 @@ const defaultFooterSettings: FooterSettings = {
     copyrightText: "© 2023-2026 TradeVission. All Rights Reserved."
 };
 
-export function Footer() {
-  const { db } = useFirebase();
-  const [pages, setPages] = useState<DynamicPage[]>([]);
-  const [categories, setCategories] = useState<PageCategory[]>([]);
-  const [footerSettings, setFooterSettings] = useState<FooterSettings>(defaultFooterSettings);
+async function getFooterData() {
+  try {
+    const { db } = getFirebase();
 
-  useEffect(() => {
-    if (!db) return;
-    
-    // Fetch only active pages, sorted by order
     const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true), orderBy("order", "asc"));
-    const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
-        const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
-        setPages(pagesData);
-    });
-
     const categoriesQuery = query(collection(db, "categories"), orderBy("name", "asc"));
-    const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
-        const catsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
-        setCategories(catsData);
-    });
-    
     const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
-        if (doc.exists() && doc.data().footer) {
-            setFooterSettings(doc.data().footer);
-        }
-    });
 
-    return () => {
-        unsubscribePages();
-        unsubscribeCategories();
-        unsubscribeSettings();
-    };
-  }, [db]);
+    const [pagesSnapshot, categoriesSnapshot, settingsDoc] = await Promise.all([
+        getDocs(pagesQuery),
+        getDocs(categoriesQuery),
+        getDoc(settingsDocRef)
+    ]);
 
-  const groupedPages = useMemo(() => {
-    return categories.map(category => ({
+    const pages: DynamicPage[] = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
+    const categories: PageCategory[] = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
+    
+    let footerSettings = defaultFooterSettings;
+    if (settingsDoc.exists() && settingsDoc.data().footer) {
+        footerSettings = { ...defaultFooterSettings, ...settingsDoc.data().footer };
+    }
+
+    const groupedPages = categories.map(category => ({
         ...category,
         pages: pages.filter(page => page.category === category.name)
     })).filter(category => category.pages.length > 0);
-  }, [pages, categories]);
+
+    return { groupedPages, footerSettings };
+  } catch (error) {
+    console.error("Failed to fetch footer data:", error);
+    // Return empty data on error to prevent site crash
+    return { groupedPages: [], footerSettings: defaultFooterSettings };
+  }
+}
+
+// Re-importing doc and getDoc for server-side usage
+import { doc, getDoc } from "firebase/firestore";
+
+export async function Footer() {
+  const { groupedPages, footerSettings } = await getFooterData();
 
   return (
     <footer className="border-t border-border/20 py-12 px-6 bg-background">
@@ -95,7 +89,7 @@ export function Footer() {
                       <h4 className="font-bold text-white mb-4">{category.name}</h4>
                       <nav className="flex flex-col gap-2">
                           {category.pages.map(page => (
-                              <Link key={page.id} href={`/page/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                              <Link key={page.id} href={`/legal/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                 {page.title}
                               </Link>
                           ))}

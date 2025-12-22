@@ -199,7 +199,7 @@ export default function LandingPage() {
                                 <h3 className="text-xl font-bold text-white mb-4">{category.name}</h3>
                                 <nav className="flex flex-col gap-3">
                                     {category.pages.map(page => (
-                                        <Link key={page.id} href={`/page/${page.slug}`} className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors group">
+                                        <Link key={page.id} href={`/legal/${page.slug}`} className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors group">
                                             <FileText className="h-4 w-4 text-primary/60 group-hover:text-primary transition-colors" />
                                             <span>{page.title}</span>
                                         </Link>
