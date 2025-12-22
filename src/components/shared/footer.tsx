@@ -5,6 +5,9 @@ import { Mail } from "lucide-react";
 import { collection, query, orderBy, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { getFirebase } from "@/lib/firebase/config";
 
+// This line disables data caching for the footer, ensuring updates are always fresh.
+export const revalidate = 0;
+
 interface DynamicPage {
   id: string;
   title: string;
