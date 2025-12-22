@@ -32,7 +32,7 @@ interface PageContent {
 export default function EditPage() {
     const router = useRouter();
     const params = useParams();
-    const pageId = Array.isArray(params.slug) ? params.slug[0] : params.slug;
+    const pageId = Array.isArray(params.id) ? params.id[0] : params.id;
 
     const { db } = getFirebase();
     const { toast } = useToast();
@@ -58,16 +58,26 @@ export default function EditPage() {
             if (docSnap.exists()) {
                 const data = docSnap.data() as PageContent;
                 form.reset(data);
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Page Not Found",
+                    description: "The page you are trying to edit does not exist.",
+                });
+                router.push('/admin/settings');
             }
             setLoading(false);
         };
 
         fetchPage();
-    }, [db, pageId, form]);
+    }, [db, pageId, form, router, toast]);
 
     const onSubmit = (data: PageFormData) => {
         startTransition(async () => {
             try {
+                if (!pageId) {
+                    throw new Error("Page ID is missing.");
+                }
                 await updatePageAction(pageId, data);
                 toast({
                     title: "Page Updated",
