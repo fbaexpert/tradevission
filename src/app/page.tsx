@@ -28,17 +28,8 @@ export default function LandingPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // --- Password Reset Redirect ---
-    const mode = searchParams.get('mode');
-    const oobCode = searchParams.get('oobCode');
-
-    if (mode === 'resetPassword' && oobCode) {
-        // Use window.location.href for immediate redirect
-        window.location.href = `/reset-password?${searchParams.toString()}`;
-        return; // Stop further execution
-    }
-
-    // --- Referral Link Logic ---
+    // This logic handles storing the referral ID from the URL
+    // It is client-side and separate from the password reset flow, which is now handled by middleware.
     const refId = searchParams.get('ref');
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
