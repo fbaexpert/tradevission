@@ -53,6 +53,15 @@ export default function LandingPage() {
     }
   }, [searchParams, router]);
 
+  // If a redirect is pending, we can show a minimal loader or nothing.
+  if (searchParams.get('mode') === 'resetPassword') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoaderCircle className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-background text-foreground flex flex-col">
       {/* Header */}
