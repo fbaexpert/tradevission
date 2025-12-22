@@ -299,6 +299,9 @@ export default function AdminSettingsPage() {
     const [saving, setSaving] = useState(false);
     const { toast } = useToast();
     
+    // --- State for individual form fields ---
+    const [footerSettings, setFooterSettings] = useState<FooterSettings>(defaultSettings.footer);
+    
     useEffect(() => {
         if (!db) return;
 
@@ -318,9 +321,11 @@ export default function AdminSettingsPage() {
                     planTags: data.planTags?.length ? data.planTags : defaultSettings.planTags,
                 };
                 setSettings(mergedSettings);
+                setFooterSettings(mergedSettings.footer);
             } else {
                 setDoc(settingsDocRef, defaultSettings);
                 setSettings(defaultSettings);
+                setFooterSettings(defaultSettings.footer);
             }
             setLoading(false);
         });
@@ -331,9 +336,15 @@ export default function AdminSettingsPage() {
     const handleSave = () => {
         if (!settings || !db) return;
         setSaving(true);
+
+        const settingsToSave = {
+            ...settings,
+            footer: footerSettings,
+        };
+
         const settingsDocRef = doc(db, "system", "settings");
         
-        setDoc(settingsDocRef, settings, { merge: true }).then(() => {
+        setDoc(settingsDocRef, settingsToSave, { merge: true }).then(() => {
             toast({
                 title: "Settings Saved",
                 description: "Global settings have been updated successfully.",
@@ -561,15 +572,15 @@ export default function AdminSettingsPage() {
                                 <div className="space-y-4 pt-4 border-t">
                                     <div className="space-y-2">
                                         <Label htmlFor="footer-desc">Description</Label>
-                                        <Textarea id="footer-desc" value={settings.footer.description} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, description: e.target.value}}): null)} />
+                                        <Textarea id="footer-desc" value={footerSettings.description} onChange={(e) => setFooterSettings(s => ({...s, description: e.target.value}))} />
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="footer-email">Contact Email</Label>
-                                        <Input id="footer-email" type="email" value={settings.footer.contactEmail} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, contactEmail: e.target.value}}): null)} />
+                                        <Input id="footer-email" type="email" value={footerSettings.contactEmail} onChange={(e) => setFooterSettings(s => ({...s, contactEmail: e.target.value}))} />
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="footer-copyright">Copyright Text</Label>
-                                        <Input id="footer-copyright" value={settings.footer.copyrightText} onChange={(e) => setSettings(s => s ? ({...s, footer: {...s.footer, copyrightText: e.target.value}}): null)} />
+                                        <Input id="footer-copyright" value={footerSettings.copyrightText} onChange={(e) => setFooterSettings(s => ({...s, copyrightText: e.target.value}))} />
                                     </div>
                                 </div>
                             </div>
@@ -597,4 +608,3 @@ export default function AdminSettingsPage() {
         </Card>
     );
 }
-
