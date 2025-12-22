@@ -182,10 +182,9 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
 
 
 /**
- * A callable function that deletes a user account from Firebase Authentication and all their related data.
- * This is a robust function that handles various cleanup tasks.
+ * A callable function that deletes a user account from Firebase Authentication and triggers the onDelete function for cleanup.
  */
-export const deleteUserAccount = functions.runWith({timeoutSeconds: 120, memory: '512MB'}).https.onCall(async (data, context) => {
+export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: '256MB'}).https.onCall(async (data, context) => {
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
     }
@@ -246,9 +245,9 @@ export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (
             const subcollectionRef = db.collection('users').doc(uid).collection(sub);
             const snapshot = await subcollectionRef.get();
             if(!snapshot.empty) {
-                const subBatch = db.batch();
-                snapshot.docs.forEach(doc => subBatch.delete(doc.ref));
-                await subBatch.commit();
+                const deleteBatch = db.batch();
+                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                await deleteBatch.commit();
                 functions.logger.log(`Deleted subcollection '${sub}' for user: ${uid}`);
             }
         }
@@ -257,8 +256,9 @@ export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (
         const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
         for (const path of storagePaths) {
             await bucket.deleteFiles({ prefix: path, force: true });
+            functions.logger.log(`Storage path '${path}' deleted for user: ${uid}`);
         }
-        functions.logger.log(`Storage files deleted for user: ${uid}`);
+        
 
     } catch (error: any) {
         functions.logger.error(`Error during cleanup of user ${uid}:`, error);

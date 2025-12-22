@@ -19,8 +19,9 @@ service firebase.storage {
     }
 
     // Admins can read any screenshot or kyc document.
+    // Allow read access for authenticated users to their own files and for admins to any file.
     match /deposit_screenshots/{userId}/{allPaths=**} {
-       allow read: if request.auth != null && request.auth.token.email == "ummarfarooq38990@gmail.com";
+       allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == "ummarfarooq38990@gmail.com");
     }
     match /kyc_documents/{userId}/{allPaths=**} {
        allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == "ummarfarooq38990@gmail.com");
