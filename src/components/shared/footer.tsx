@@ -1,12 +1,10 @@
 
-"use client";
-
-import { useEffect, useState } from "react";
+import { unstable_noStore as noStore } from 'next/cache';
 import Link from "next/link";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, query, where, onSnapshot, orderBy, getDocs, doc, Timestamp } from "firebase/firestore";
-import { useFirebase } from "@/lib/firebase/provider";
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
+import { getFirebase } from "@/lib/firebase/config";
 
 interface FooterSettings {
     contact: string;
@@ -23,9 +21,6 @@ interface WebPage {
     title: string;
     slug: string;
     category: string;
-    isActive: boolean;
-    inFooter: boolean;
-    order: number;
 }
 
 const defaultFooterSettings: FooterSettings = {
@@ -33,57 +28,40 @@ const defaultFooterSettings: FooterSettings = {
     copyright: "© 2024 TradeVission. All Rights Reserved."
 };
 
-export function Footer() {
-  const { db } = useFirebase();
-  const [settings, setSettings] = useState<FooterSettings>(defaultFooterSettings);
-  const [pageCategories, setPageCategories] = useState<PageCategory[]>([]);
-  const [pages, setPages] = useState<WebPage[]>([]);
-  const [loading, setLoading] = useState(true);
+async function getFooterData() {
+    // This function tells Next.js not to cache the data from this fetch.
+    noStore();
+    try {
+        const { db } = getFirebase();
+        const settingsDocRef = doc(db, "site_footer", "content");
+        const systemSettingsDocRef = doc(db, "system", "settings");
+        const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), where("inFooter", "==", true), orderBy("order", "asc"));
+        
+        const [settingsDoc, systemSettingsDoc, pagesSnapshot] = await Promise.all([
+            getDoc(settingsDocRef),
+            getDoc(systemSettingsDocRef),
+            getDocs(pagesQuery),
+        ]);
 
-  useEffect(() => {
-    if (!db) {
-        setLoading(false);
-        return;
-    };
-    
-    const settingsDocRef = doc(db, "site_footer", "content");
-    const unsubFooter = onSnapshot(settingsDocRef, (doc) => {
-        if (doc.exists()) setSettings(doc.data() as FooterSettings);
-        else setSettings(defaultFooterSettings);
-    });
+        const settings = settingsDoc.exists() ? settingsDoc.data() as FooterSettings : defaultFooterSettings;
+        const pageCategories = systemSettingsDoc.exists() ? systemSettingsDoc.data().pageCategories || [] : [];
+        const pages = pagesSnapshot.docs.map(doc => doc.data() as WebPage);
 
-    const systemSettingsDocRef = doc(db, "system", "settings");
-    const unsubSystem = onSnapshot(systemSettingsDocRef, (doc) => {
-        if(doc.exists()) setPageCategories(doc.data().pageCategories || []);
-    });
-    
-    const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), where("inFooter", "==", true), orderBy("order", "asc"));
-    const unsubPages = onSnapshot(pagesQuery, (snapshot) => {
-        setPages(snapshot.docs.map(doc => doc.data() as WebPage));
-        setLoading(false);
-    });
+        const groupedPages = pageCategories.map((category: PageCategory) => ({
+            ...category,
+            pages: pages.filter(page => page.category === category.name)
+        })).filter((category: any) => category.pages.length > 0);
 
-    return () => {
-        unsubFooter();
-        unsubSystem();
-        unsubPages();
-    };
-  }, [db]);
+        return { settings, groupedPages };
+    } catch (error) {
+        console.error("Error fetching footer data: ", error);
+        return { settings: defaultFooterSettings, groupedPages: [] };
+    }
+}
 
-  const groupedPages = pageCategories.map(category => ({
-      ...category,
-      pages: pages.filter(page => page.category === category.name)
-  })).filter(category => category.pages.length > 0);
 
-  if (loading) {
-    return (
-        <footer className="border-t border-border/20 py-12 px-6 bg-background animate-pulse">
-            <div className="container mx-auto text-center">
-                <div className="h-4 bg-muted/50 rounded w-1/4 mx-auto"></div>
-            </div>
-        </footer>
-    )
-  }
+export async function Footer() {
+  const { settings, groupedPages } = await getFooterData();
 
   return (
     <footer className="border-t border-border/20 bg-background text-foreground">
@@ -103,11 +81,11 @@ export function Footer() {
                 </div>
                 
                 {/* Dynamically generated columns */}
-                {groupedPages.map(category => (
+                {groupedPages.map((category: any) => (
                     <div key={category.id} className="flex flex-col items-center md:items-start">
                         <h4 className="font-bold text-white mb-4">{category.name}</h4>
                         <ul className="space-y-2">
-                           {category.pages.map(page => (
+                           {category.pages.map((page: WebPage) => (
                                <li key={page.slug}>
                                    <Link href={`/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                        {page.title}
@@ -139,3 +117,4 @@ export function Footer() {
     </footer>
   );
 }
+
