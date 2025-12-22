@@ -73,7 +73,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal, ShieldAlert, ShieldQuestion, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -196,6 +196,10 @@ export default function AdminUsersPage() {
   // Hard Reset State
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [resetTypedConfirm, setResetTypedConfirm] = useState("");
+
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
 
    useEffect(() => {
@@ -344,6 +348,13 @@ export default function AdminUsersPage() {
     setResetTypedConfirm("");
     setIsResetConfirmOpen(true);
   }
+
+  const openPasswordDialog = (user: User) => {
+    setSelectedUser(user);
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setIsPasswordDialogOpen(true);
+  };
 
   const updateUserStatus = async (userId: string, field: string, value: any) => {
     if (!db) return;
@@ -763,6 +774,30 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleChangePassword = async () => {
+    if (!selectedUser || !newPassword || !functions) return;
+    if (newPassword.length < 6) {
+        toast({ variant: "destructive", title: "Password Too Short", description: "Password must be at least 6 characters." });
+        return;
+    }
+    if (newPassword !== confirmNewPassword) {
+        toast({ variant: "destructive", title: "Passwords Do Not Match" });
+        return;
+    }
+    setIsSubmitting(true);
+    const changeUserPassword = httpsCallable(functions, 'changeUserPassword');
+    try {
+        await changeUserPassword({ uid: selectedUser.id, password: newPassword });
+        toast({ title: "Password Updated", description: `Password for ${selectedUser.email} has been changed.` });
+        setIsPasswordDialogOpen(false);
+    } catch (error: any) {
+        console.error("Password change failed:", error);
+        toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not change the password." });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
   const handleDeleteUser = async (user: User) => {
     if (!functions) return;
     setIsSubmitting(true);
@@ -962,6 +997,10 @@ export default function AdminUsersPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => openPasswordDialog(user)}>
+                                  <KeyRound className="mr-2 h-4 w-4" />
+                                  Change Password
+                                </DropdownMenuItem>
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger>Edit Funds</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
@@ -1554,6 +1593,48 @@ export default function AdminUsersPage() {
             <Button variant="destructive" onClick={handleHardReset} disabled={isSubmitting || resetTypedConfirm !== 'RESET'}>
               {isSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Confirm Hard Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password for {selectedUser?.name}</DialogTitle>
+            <DialogDescription>
+              Enter a new password for {selectedUser?.email}. The user will be notified of this change.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+              />
+            </div>
+             <div className="space-y-2">
+              <Label htmlFor="confirm-new-password">Confirm New Password</Label>
+              <Input
+                id="confirm-new-password"
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                placeholder="Confirm new password"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleChangePassword} disabled={isSubmitting}>
+              {isSubmitting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+              Save Password
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+
 {
   "name": "functions",
   "description": "Cloud Functions for Firebase",
@@ -25,6 +26,7 @@
     "@typescript-eslint/parser": "^5.12.0",
     "eslint": "^8.9.0",
     "eslint-plugin-import": "^2.25.4",
+    "firebase-functions-test": "^3.2.0",
     "typescript": "^5"
   },
   "private": true
