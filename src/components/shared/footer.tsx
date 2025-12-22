@@ -5,12 +5,27 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, getDocs, doc, Timestamp } from "firebase/firestore";
 import { useFirebase } from "@/lib/firebase/provider";
 
 interface FooterSettings {
     contact: string;
     copyright: string;
+}
+
+interface PageCategory {
+  id: string;
+  name: string;
+}
+
+interface WebPage {
+    id: string;
+    title: string;
+    slug: string;
+    category: string;
+    isActive: boolean;
+    inFooter: boolean;
+    order: number;
 }
 
 const defaultFooterSettings: FooterSettings = {
@@ -21,6 +36,8 @@ const defaultFooterSettings: FooterSettings = {
 export function Footer() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<FooterSettings>(defaultFooterSettings);
+  const [pageCategories, setPageCategories] = useState<PageCategory[]>([]);
+  const [pages, setPages] = useState<WebPage[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,21 +47,33 @@ export function Footer() {
     };
     
     const settingsDocRef = doc(db, "site_footer", "content");
-    const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
-        if (doc.exists()) {
-            setSettings(doc.data() as FooterSettings);
-        } else {
-            setSettings(defaultFooterSettings);
-        }
-        setLoading(false);
-    }, (error) => {
-        console.error("Failed to fetch footer settings:", error);
-        setSettings(defaultFooterSettings);
+    const unsubFooter = onSnapshot(settingsDocRef, (doc) => {
+        if (doc.exists()) setSettings(doc.data() as FooterSettings);
+        else setSettings(defaultFooterSettings);
+    });
+
+    const systemSettingsDocRef = doc(db, "system", "settings");
+    const unsubSystem = onSnapshot(systemSettingsDocRef, (doc) => {
+        if(doc.exists()) setPageCategories(doc.data().pageCategories || []);
+    });
+    
+    const pagesQuery = query(collection(db, "websitePages"), where("isActive", "==", true), where("inFooter", "==", true), orderBy("order", "asc"));
+    const unsubPages = onSnapshot(pagesQuery, (snapshot) => {
+        setPages(snapshot.docs.map(doc => doc.data() as WebPage));
         setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+        unsubFooter();
+        unsubSystem();
+        unsubPages();
+    };
   }, [db]);
+
+  const groupedPages = pageCategories.map(category => ({
+      ...category,
+      pages: pages.filter(page => page.category === category.name)
+  })).filter(category => category.pages.length > 0);
 
   if (loading) {
     return (
@@ -59,9 +88,9 @@ export function Footer() {
   return (
     <footer className="border-t border-border/20 bg-background text-foreground">
         <div className="container mx-auto px-6 py-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center md:text-left">
                 {/* Column 1: Logo and Tagline */}
-                <div className="flex flex-col items-center md:items-start space-y-4">
+                <div className="flex flex-col items-center md:items-start space-y-4 lg:col-span-1">
                     <div className="flex items-center gap-3">
                         <Logo />
                         <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
@@ -72,19 +101,31 @@ export function Footer() {
                         A modern platform to help you navigate the markets, invest in your future, and earn daily rewards.
                     </p>
                 </div>
+                
+                {/* Dynamically generated columns */}
+                {groupedPages.map(category => (
+                    <div key={category.id} className="flex flex-col items-center md:items-start">
+                        <h4 className="font-bold text-white mb-4">{category.name}</h4>
+                        <ul className="space-y-2">
+                           {category.pages.map(page => (
+                               <li key={page.slug}>
+                                   <Link href={`/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                                       {page.title}
+                                   </Link>
+                               </li>
+                           ))}
+                        </ul>
+                    </div>
+                ))}
 
-                {/* Column 2: Contact Info */}
-                <div className="flex flex-col items-center md:items-center">
+
+                {/* Column for Contact Info */}
+                <div className="flex flex-col items-center md:items-start">
                      <h4 className="font-bold text-white mb-4">Contact Us</h4>
                     <a href={`mailto:${settings.contact}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
                         <Mail className="h-4 w-4"/>
                         {settings.contact}
                     </a>
-                </div>
-
-                {/* Column 3 can be used for links later if needed */}
-                <div className="flex flex-col items-center md:items-end">
-                     {/* Placeholder for future links */}
                 </div>
             </div>
             

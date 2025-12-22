@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDocs, collection, query, where, orderBy, deleteDoc } from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -35,7 +35,10 @@ import {
   Eye,
   Gift,
   Contact,
-  Copyright
+  Copyright,
+  FilePlus,
+  FileText,
+  Edit
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +49,10 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import Link from "next/link";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 // --- Interface Definitions ---
@@ -105,6 +112,15 @@ interface PageCategory {
 interface SimpleFooterSettings {
     contact: string;
     copyright: string;
+}
+interface WebPage {
+    id: string;
+    title: string;
+    slug: string;
+    category: string;
+    isActive: boolean;
+    inFooter: boolean;
+    order: number;
 }
 
 interface AdminSettings {
@@ -167,6 +183,7 @@ export default function AdminSettingsPage() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
   const [footerSettings, setFooterSettings] = useState<SimpleFooterSettings>({ contact: '', copyright: '' });
+  const [pages, setPages] = useState<WebPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -192,10 +209,16 @@ export default function AdminSettingsPage() {
             setFooterSettings(doc.data() as SimpleFooterSettings);
         }
     });
+    
+    const pagesQuery = query(collection(db, "websitePages"), orderBy("order", "asc"));
+    const unsubPages = onSnapshot(pagesQuery, (snapshot) => {
+        setPages(snapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as WebPage)));
+    });
 
     return () => {
         unsubSettings();
         unsubFooter();
+        unsubPages();
     };
   }, [db]);
 
@@ -225,6 +248,16 @@ export default function AdminSettingsPage() {
       setSaving(false);
     });
   };
+  
+  const handleDeletePage = async (pageId: string) => {
+      if (!db) return;
+      try {
+          await deleteDoc(doc(db, "websitePages", pageId));
+          toast({title: "Page Deleted"});
+      } catch (error) {
+          toast({variant: "destructive", title: "Deletion Failed"});
+      }
+  }
 
   const handleSettingChange = (
     key: keyof AdminSettings,
@@ -327,11 +360,10 @@ export default function AdminSettingsPage() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="general">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="promotions">Promotions</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
-            <TabsTrigger value="cpm">CPM Coin</TabsTrigger>
           </TabsList>
           
           <TabsContent value="general" className="mt-6">
@@ -450,8 +482,8 @@ export default function AdminSettingsPage() {
                     <Label className="text-base flex items-center gap-2 font-bold text-white"><Trophy/> Super Bonus Tiers</Label>
                     <p className="text-sm text-muted-foreground">Reward users with a one-time bonus when they reach a certain number of total team members.</p>
                      <div className="space-y-3 pt-4 border-t">
-                        {settings.superBonusTiers.map((tier, index) => (
-                            <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
+                        {settings.superBonusTiers.map((tier) => (
+                            <div key={tier.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
                                 <div className="space-y-2">
                                     <Label htmlFor={`tier-referrals-${tier.id}`}>Referral Count</Label>
                                     <Input id={`tier-referrals-${tier.id}`} type="number" value={tier.referrals} onChange={(e) => handleTierChange(tier.id, 'referrals', Number(e.target.value))} />
@@ -507,8 +539,8 @@ export default function AdminSettingsPage() {
                   <Label className="text-base flex items-center gap-2 font-bold text-white"><Tag/> Plan Tags</Label>
                   <p className="text-sm text-muted-foreground">Create custom tags to display on investment plans.</p>
                    <div className="space-y-3 pt-4 border-t">
-                      {settings.planTags.map((tag, index) => (
-                          <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
+                      {settings.planTags.map((tag) => (
+                          <div key={tag.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
                               <div className="space-y-2">
                                   <Label htmlFor={`tag-name-${tag.id}`}>Tag Name</Label>
                                   <Input id={`tag-name-${tag.id}`} value={tag.name} onChange={(e) => handleTagChange(tag.id, 'name', e.target.value)} />
@@ -533,8 +565,8 @@ export default function AdminSettingsPage() {
                   <Label className="text-base flex items-center gap-2 font-bold text-white"><Contact/> Page Categories</Label>
                   <p className="text-sm text-muted-foreground">Manage categories for organizing footer and policy pages.</p>
                    <div className="space-y-3 pt-4 border-t">
-                      {settings.pageCategories.map((cat, index) => (
-                          <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center p-3 rounded-md bg-muted/30">
+                      {settings.pageCategories.map((cat) => (
+                          <div key={cat.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center p-3 rounded-md bg-muted/30">
                               <div className="space-y-2">
                                   <Label htmlFor={`cat-name-${cat.id}`}>Category Name</Label>
                                   <Input id={`cat-name-${cat.id}`} value={cat.name} onChange={(e) => handleCategoryChange(cat.id, e.target.value)} />
@@ -547,18 +579,68 @@ export default function AdminSettingsPage() {
                        <Button variant="outline" onClick={addCategory}><PlusCircle className="mr-2"/> Add Category</Button>
                   </div>
               </div>
+
+               <div className="space-y-4 rounded-lg border p-4">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer & Policy Pages</Label>
+                     <Button asChild>
+                        <Link href="/admin/pages/new"><FilePlus className="mr-2" /> Add New Page</Link>
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Create and manage static pages like "About Us" or "Privacy Policy".</p>
+                  <div className="pt-4 border-t">
+                     {pages.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No pages created yet.</p>
+                     ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Title</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Footer</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {pages.map(page => (
+                                    <TableRow key={page.id}>
+                                        <TableCell className="font-medium">{page.title}</TableCell>
+                                        <TableCell><Badge variant="secondary">{page.category}</Badge></TableCell>
+                                        <TableCell><Badge variant={page.isActive ? 'default' : 'destructive'}>{page.isActive ? 'Active' : 'Draft'}</Badge></TableCell>
+                                        <TableCell>{page.inFooter ? 'Yes' : 'No'}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button asChild variant="ghost" size="icon">
+                                                <Link href={`/admin/pages/edit/${page.id}`}><Edit className="h-4 w-4" /></Link>
+                                            </Button>
+                                             <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete Page?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Are you sure you want to delete the page "{page.title}"? This cannot be undone.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDeletePage(page.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                     )}
+                  </div>
+              </div>
+
             </div>
           </TabsContent>
-
-          <TabsContent value="cpm" className="mt-6">
-            <div className="space-y-8">
-               <Alert>
-                 <AlertTriangle className="h-4 w-4" />
-                 <AlertTitle>This feature is not yet implemented.</AlertTitle>
-               </Alert>
-            </div>
-          </TabsContent>
-
         </Tabs>
         
         <div className="mt-8 border-t pt-6">
@@ -571,5 +653,3 @@ export default function AdminSettingsPage() {
     </Card>
   );
 }
-
-    
