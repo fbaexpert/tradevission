@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -39,7 +38,6 @@ import {
   FlipVertical,
   ShieldCheck,
   Trophy,
-  Scale,
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -57,8 +55,6 @@ import {
 import AdminNotificationCenter from "@/components/shared/admin-notification-center";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Logo } from "@/components/shared/logo";
-import { Footer } from "@/components/shared/footer";
-
 
 const ADMIN_EMAIL = "ummarfarooq38990@gmail.com";
 
@@ -68,13 +64,10 @@ const navItems = [
   { href: "/admin/vip-tiers", icon: Trophy, label: "VIP Tiers" },
   { href: "/admin/commander-rewards", icon: Star, label: "Commander Rewards" },
   { href: "/admin/plans", icon: Package, label: "Manage Plans" },
-  { href: "/admin/spin-win", icon: Star, label: "Spin & Win Settings" },
-  { href: "/admin/flip-win", icon: FlipVertical, label: "Flip & Win Settings" },
   { href: "/admin/user-plans", icon: Rocket, label: "User Plans" },
   { href: "/admin/deposits", icon: ArrowDownToDot, label: "Deposits" },
   { href: "/admin/withdrawals", icon: ArrowUpFromDot, label: "Withdrawals" },
   { href: "/admin/cpm-withdrawals", icon: Coins, label: "CPM Withdrawals" },
-  { href: "/admin/cpm-settings", icon: Coins, label: "CPM Coin Settings" },
   { href: "/admin/vip-codes", icon: KeyRound, label: "VIP Codes" },
   { href: "/admin/support", icon: LifeBuoy, label: "Support Tickets" },
   { href: "/admin/maintenance-support", icon: Wrench, label: "Maintenance Support" },

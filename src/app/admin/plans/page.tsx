@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect } from "react";
 import { useForm, SubmitHandler, Controller } from "react-hook-form";
@@ -199,7 +198,7 @@ export default function ManagePlansPage() {
       unsubscribePlans();
       unsubscribeTags();
     }
-  }, [db, toast, planTags.length]);
+  }, [db, toast]);
 
   const onSubmit: SubmitHandler<PlanFormData> = (data) => {
     if (!db) return;
