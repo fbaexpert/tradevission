@@ -1,7 +1,7 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getFirestore, Firestore, connectFirestoreEmulator, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
@@ -31,21 +31,13 @@ export const getFirebase = (): FirebaseServices => {
     }
 
     const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    // This line is the key fix. By attempting to connect to an emulator that doesn't exist
-    // in production, we effectively opt out of Next.js's default data caching for Firestore.
-    // This forces the server to fetch fresh data on each request, ensuring the footer updates.
-    // NOTE: For a real production app with high traffic, a more advanced revalidation strategy
-    // like on-demand revalidation (`revalidatePath`) would be better for performance.
-    if (process.env.NODE_ENV !== 'production') {
-      try {
-        // connectFirestoreEmulator(db, 'localhost', 8080);
-      } catch (e) {
-        // This is expected if the emulator is not running, but it serves our purpose.
-      }
-    }
-
+    
+    // Initialize Firestore with caching disabled.
+    // This is the key change to ensure data is always fresh from the server.
+    const db = initializeFirestore(app, {
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+      ignoreUndefinedProperties: true
+    });
 
     const auth = getAuth(app);
     const storage = getStorage(app);
