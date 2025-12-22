@@ -23,17 +23,16 @@ service firebase.storage {
     // Admins can read any screenshot or kyc document.
     // This assumes you have a custom claim 'isAdmin' set to true on the admin's token.
     match /deposit_screenshots/{userId}/{allPaths=**} {
-       allow read: if request.auth != null && request.auth.token.isAdmin == true;
+       allow read: if request.auth != null && request.auth.token.email == "ummarfarooq38990@gmail.com";
     }
      match /kyc_documents/{userId}/{allPaths=**} {
-       allow read: if request.auth != null && request.auth.token.isAdmin == true;
+       allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == "ummarfarooq38990@gmail.com");
     }
 
-    // Allow backend functions (service accounts) to perform any action on any file.
+    // Allow admin functions to perform any action on any file.
     // This is crucial for the deleteUser function to be able to delete user files.
-    // Service accounts authenticate with a null `request.auth` object.
     match /{allPaths=**} {
-      allow read, write, delete: if request.auth == null;
+      allow delete: if request.auth != null && request.auth.token.email == "ummarfarooq38990@gmail.com";
     }
   }
 }
