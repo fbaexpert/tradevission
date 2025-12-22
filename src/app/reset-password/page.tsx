@@ -156,7 +156,7 @@ function ResetPasswordComponent() {
 
 export default function ResetPasswordPage() {
     return (
-        <Suspense fallback={<LoaderCircle className="animate-spin" />}>
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm gap-6"><LoaderCircle className="animate-spin h-12 w-12 text-primary" /></div>}>
             <ResetPasswordComponent />
         </Suspense>
     );
