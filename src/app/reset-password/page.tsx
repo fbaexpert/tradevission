@@ -1,14 +1,13 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirebase } from '@/lib/firebase/provider';
 import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,19 +25,18 @@ const passwordSchema = z.object({
 
 type PasswordFormData = z.infer<typeof passwordSchema>;
 
-export default function AuthActionPage() {
+function ResetPasswordComponent() {
     const { auth } = useFirebase();
     const router = useRouter();
     const searchParams = useSearchParams();
     
-    // State to hold parameters from URL
-    const [mode, setMode] = useState<string | null>(null);
     const [actionCode, setActionCode] = useState<string | null>(null);
     
     const [loading, setLoading] = useState(true);
     const [isValidCode, setIsValidCode] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const form = useForm<PasswordFormData>({
         resolver: zodResolver(passwordSchema),
@@ -46,43 +44,36 @@ export default function AuthActionPage() {
     });
 
     useEffect(() => {
-        const modeParam = searchParams.get('mode');
         const codeParam = searchParams.get('oobCode');
 
-        if (modeParam && codeParam) {
-            setMode(modeParam);
+        if (codeParam) {
             setActionCode(codeParam);
         } else {
-            setError("Invalid or incomplete link. Please check the link or request a new one.");
+            setError("Invalid or incomplete link. Please request a new one.");
             setLoading(false);
         }
     }, [searchParams]);
 
     useEffect(() => {
-        if (mode && actionCode && auth) {
-            if (mode === 'resetPassword') {
-                verifyPasswordResetCode(auth, actionCode)
-                    .then(() => {
-                        setIsValidCode(true);
-                        setLoading(false);
-                    })
-                    .catch((err) => {
-                        setError("Invalid or expired password reset link. Please request a new one.");
-                        setLoading(false);
-                    });
-            } else {
-                setError(`Unsupported action mode: '${mode}'. Please check the link.`);
-                setLoading(false);
-            }
+        if (actionCode && auth) {
+            verifyPasswordResetCode(auth, actionCode)
+                .then(() => {
+                    setIsValidCode(true);
+                    setLoading(false);
+                })
+                .catch(() => {
+                    setError("Invalid or expired password reset link. Please request a new one.");
+                    setLoading(false);
+                });
         }
-    }, [mode, actionCode, auth]);
+    }, [actionCode, auth]);
 
     const handleResetPassword = async (data: PasswordFormData) => {
         if (!auth || !actionCode) {
             setError("An unexpected error occurred. Please try again.");
             return;
         }
-        setLoading(true);
+        setIsSubmitting(true);
         setError(null);
         try {
             await confirmPasswordReset(auth, actionCode, data.newPassword);
@@ -90,7 +81,7 @@ export default function AuthActionPage() {
         } catch (err: any) {
             setError("Failed to reset password. The link may have expired or been used already. Please request a new one.");
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -119,7 +110,7 @@ export default function AuthActionPage() {
             );
         }
 
-        if (isValidCode && mode === 'resetPassword') {
+        if (isValidCode) {
             return (
                 <form onSubmit={form.handleSubmit(handleResetPassword)} className="space-y-4">
                     <div className="space-y-2">
@@ -132,15 +123,14 @@ export default function AuthActionPage() {
                         <Input id="confirmPassword" type="password" {...form.register('confirmPassword')} />
                         {form.formState.errors.confirmPassword && <p className="text-red-500 text-sm">{form.formState.errors.confirmPassword.message}</p>}
                     </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading && <LoaderCircle className="animate-spin mr-2" />}
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                        {isSubmitting && <LoaderCircle className="animate-spin mr-2" />}
                         Reset Password
                     </Button>
                 </form>
             );
         }
 
-        // Fallback for any other state
         return null;
     };
 
@@ -150,10 +140,10 @@ export default function AuthActionPage() {
             <Card className="w-full max-w-md border-border/20 shadow-lg shadow-primary/5">
                 <CardHeader>
                     <CardTitle className="text-2xl text-center text-white">
-                        {mode === 'resetPassword' ? 'Reset Your Password' : 'Authentication Action'}
+                        Reset Your Password
                     </CardTitle>
                     <CardDescription className="text-center">
-                        {isValidCode && mode === 'resetPassword' && !success && "Enter your new password below."}
+                        {isValidCode && !success && "Enter your new password below."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -161,5 +151,13 @@ export default function AuthActionPage() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function ResetPasswordPage() {
+    return (
+        <Suspense fallback={<LoaderCircle className="animate-spin" />}>
+            <ResetPasswordComponent />
+        </Suspense>
     );
 }

@@ -16,10 +16,10 @@ To make the "Forgot Password" feature work correctly, you need to configure the 
 5.  Near the bottom, click the **"Customize action URL"** link.
 6.  A dialog box will appear. Paste the following URL into the text box.
 
-    **IMPORTANT:** You might need to replace `tradevision-82417` with your actual Firebase Project ID if it's different. You can find your project ID in the Firebase Console project settings (click the gear icon ⚙️ next to "Project Overview").
+    **IMPORTANT:** You MUST replace `tradevision-82417` with your actual Firebase Project ID if it's different. You can find your project ID in the Firebase Console project settings (click the gear icon ⚙️ next to "Project Overview"). The final domain should be `your-project-id.web.app`, NOT `tradevission.online`. The `.web.app` domain is the default hosting domain that Firebase uses for these links.
 
     ```
-    https://tradevision-82417.web.app/auth/action
+    https://tradevision-82417.web.app/reset-password
     ```
 
 7.  Click **Save**.
