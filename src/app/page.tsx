@@ -7,21 +7,6 @@ import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useFirebase } from "@/lib/firebase/provider";
-import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
-
-interface DynamicPage {
-  id: string;
-  title: string;
-  slug: string;
-  category: string;
-  order: number;
-}
-
-interface PageCategory {
-  id: string;
-  name: string;
-}
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -41,9 +26,6 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 export default function LandingPage() {
   const searchParams = useSearchParams();
   const [loginHref, setLoginHref] = useState("/login");
-  const { db } = useFirebase();
-  const [pages, setPages] = useState<DynamicPage[]>([]);
-  const [categories, setCategories] = useState<PageCategory[]>([]);
 
   useEffect(() => {
     const refId = searchParams.get('ref');
@@ -57,34 +39,6 @@ export default function LandingPage() {
         }
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    if (!db) return;
-    
-    const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true), orderBy("order", "asc"));
-    const unsubscribePages = onSnapshot(pagesQuery, (snapshot) => {
-        const pagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DynamicPage));
-        setPages(pagesData);
-    });
-
-    const categoriesQuery = query(collection(db, "categories"), orderBy("name", "asc"));
-    const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
-        const catsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PageCategory));
-        setCategories(catsData);
-    });
-
-    return () => {
-        unsubscribePages();
-        unsubscribeCategories();
-    };
-  }, [db]);
-
-  const groupedPages = useMemo(() => {
-    return categories.map(category => ({
-        ...category,
-        pages: pages.filter(page => page.category === category.name)
-    })).filter(category => category.pages.length > 0);
-  }, [pages, categories]);
 
   return (
     <div className="bg-background text-foreground flex flex-col">
@@ -177,36 +131,6 @@ export default function LandingPage() {
                 </div>
             </div>
         </section>
-
-        {/* Information Section */}
-        {groupedPages.length > 0 && (
-            <section id="information" className="py-20 px-6 bg-muted/30">
-                <div className="container mx-auto max-w-5xl">
-                    <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Information</h2>
-                        <p className="text-muted-foreground md:text-lg max-w-3xl mx-auto">
-                            Review our official documents, policies, and terms of use.
-                        </p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                         {groupedPages.map((category) => (
-                            <div key={category.id}>
-                                <h3 className="text-xl font-bold text-white mb-4">{category.name}</h3>
-                                <nav className="flex flex-col gap-3">
-                                    {category.pages.map(page => (
-                                        <Link key={page.id} href={`/legal/${page.slug}`} className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors group">
-                                            <FileText className="h-4 w-4 text-primary/60 group-hover:text-primary transition-colors" />
-                                            <span>{page.title}</span>
-                                        </Link>
-                                    ))}
-                                </nav>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-        )}
-
       </main>
     </div>
   );

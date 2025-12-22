@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -75,7 +76,6 @@ const navItems = [
   { href: "/admin/notifications", icon: Bell, label: "Notifications" },
   { href: "/admin/airdrop", icon: Gift, label: "Airdrop" },
   { href: "/admin/activity-logs", icon: FileClock, label: "Activity Logs" },
-  { href: "/admin/pages", icon: FileText, label: "Website Pages" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
