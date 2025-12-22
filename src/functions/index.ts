@@ -28,7 +28,6 @@ export const sendWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).ht
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
     
-    // Check if email and password are configured
     if (!nodemailerConfig?.user || !nodemailerConfig?.pass) {
         functions.logger.error("Nodemailer is not configured. Run 'firebase functions:config:set nodemailer.user=\"EMAIL\" nodemailer.pass=\"PASSWORD\"'");
         throw new functions.https.HttpsError('internal', 'The email service is not configured.');
@@ -202,67 +201,76 @@ export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: 
 
     } catch (error: any) {
         functions.logger.error(`Error during full deletion of user ${uid}:`, error);
+        if (error.code === 'auth/user-not-found') {
+            functions.logger.warn(`Auth user ${uid} not found. Attempting to run cleanup anyway.`);
+            // Manually trigger cleanup logic since onDelete won't fire.
+            await cleanupUserData(uid);
+            return { success: true, message: `Auth user not found, but associated data for ${uid} has been cleaned up.` };
+        }
         throw new functions.https.HttpsError('internal', error.message || 'A failure occurred during the account deletion process.');
     }
 });
+
+/**
+ * Reusable cleanup logic for a user's data.
+ * @param {string} uid The user ID.
+ */
+async function cleanupUserData(uid: string) {
+    functions.logger.log(`Starting cleanup for user data: ${uid}`);
+    const db = admin.firestore();
+    const bucket = admin.storage().bucket();
+
+    // 1. Delete all related Firestore documents
+    const collectionsToDelete = [
+        'userPlans', 'deposits', 'withdrawals', 'cpmWithdrawals',
+        'supportTickets', 'feedback', 'kycSubmissions', 
+        'cpm_purchase_logs', 'activityLogs'
+    ];
+
+    const mainBatch = db.batch();
+    mainBatch.delete(db.collection('users').doc(uid));
+    mainBatch.delete(db.collection('cpm_coins').doc(uid));
+
+    for (const collectionName of collectionsToDelete) {
+         const field = collectionName === 'deposits' ? 'uid' : 'userId';
+         const snapshot = await db.collection(collectionName).where(field, '==', uid).get();
+         if (!snapshot.empty) {
+             snapshot.docs.forEach(doc => mainBatch.delete(doc.ref));
+         }
+    }
+    await mainBatch.commit();
+    functions.logger.log(`Main Firestore documents deleted for user: ${uid}`);
+    
+    // 2. Delete all subcollections inside the user document
+    const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
+    for (const sub of subcollections) {
+        const subcollectionRef = db.collection('users').doc(uid).collection(sub);
+        const snapshot = await subcollectionRef.get();
+        if(!snapshot.empty) {
+            const deleteBatch = db.batch();
+            snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+            await deleteBatch.commit();
+            functions.logger.log(`Deleted subcollection '${sub}' for user: ${uid}`);
+        }
+    }
+    
+    // 3. Delete all files from Firebase Storage
+    const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
+    for (const path of storagePaths) {
+        await bucket.deleteFiles({ prefix: path, force: true }).catch(err => {
+            functions.logger.error(`Failed to delete storage path '${path}':`, err);
+        });
+        functions.logger.log(`Storage path '${path}' cleaned for user: ${uid}`);
+    }
+}
+
 
 /**
  * Triggered when a user is deleted from Firebase Authentication.
  * Cleans up all associated data from Firestore and Storage.
  */
 export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (user) => {
-    const uid = user.uid;
-    functions.logger.log(`Starting cleanup for deleted user: ${uid}`);
-
-    const db = admin.firestore();
-    const bucket = admin.storage().bucket();
-
-    try {
-        // 1. Delete all related Firestore documents
-        const collectionsToDelete = [
-            'userPlans', 'deposits', 'withdrawals', 'cpmWithdrawals',
-            'supportTickets', 'feedback', 'kycSubmissions', 
-            'cpm_purchase_logs', 'activityLogs'
-        ];
-
-        const mainBatch = db.batch();
-        mainBatch.delete(db.collection('users').doc(uid));
-        mainBatch.delete(db.collection('cpm_coins').doc(uid));
-
-        for (const collectionName of collectionsToDelete) {
-             const field = collectionName === 'deposits' ? 'uid' : 'userId';
-             const snapshot = await db.collection(collectionName).where(field, '==', uid).get();
-             if (!snapshot.empty) {
-                 snapshot.docs.forEach(doc => mainBatch.delete(doc.ref));
-             }
-        }
-        await mainBatch.commit();
-        functions.logger.log(`Main Firestore documents deleted for user: ${uid}`);
-        
-        // 2. Delete all subcollections inside the user document
-        const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
-        for (const sub of subcollections) {
-            const subcollectionRef = db.collection('users').doc(uid).collection(sub);
-            const snapshot = await subcollectionRef.get();
-            if(!snapshot.empty) {
-                const deleteBatch = db.batch();
-                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
-                await deleteBatch.commit();
-                functions.logger.log(`Deleted subcollection '${sub}' for user: ${uid}`);
-            }
-        }
-        
-        // 3. Delete all files from Firebase Storage
-        const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
-        for (const path of storagePaths) {
-            await bucket.deleteFiles({ prefix: path, force: true });
-            functions.logger.log(`Storage path '${path}' deleted for user: ${uid}`);
-        }
-        
-
-    } catch (error: any) {
-        functions.logger.error(`Error during cleanup of user ${uid}:`, error);
-    }
+    await cleanupUserData(user.uid);
 });
 
 
