@@ -152,6 +152,34 @@ export const verifyWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).
     }
 });
 
+/**
+ * A callable function that allows an admin to change a user's password.
+ */
+export const changeUserPassword = functions.https.onCall(async (data, context) => {
+    // Check if the request is made by an authenticated admin user.
+    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can change user passwords.');
+    }
+
+    const { uid, password } = data;
+    if (!uid || !password) {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with "uid" and "password" arguments.');
+    }
+
+    if (password.length < 6) {
+        throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 6 characters long.');
+    }
+
+    try {
+        await admin.auth().updateUser(uid, { password });
+        functions.logger.log(`Successfully changed password for user: ${uid}`);
+        return { success: true, message: 'Password updated successfully.' };
+    } catch (error: any) {
+        functions.logger.error(`Error changing password for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'Failed to update password.');
+    }
+});
+
 
 /**
  * A callable function that deletes a user account from Firebase Authentication and their main documents from Firestore.
@@ -159,7 +187,7 @@ export const verifyWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).
  */
 export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: '256MB'}).https.onCall(async (data, context) => {
     // Check if the request is made by an authenticated admin user.
-    if (context.auth?.token.isAdmin !== true) {
+    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
     }
 
@@ -204,7 +232,7 @@ export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: 
  * This wipes most of their progress data but does not delete their auth record.
  */
 export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '512MB'}).https.onCall(async (data, context) => {
-    if (context.auth?.token.isAdmin !== true) {
+    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can reset user accounts.');
     }
 
@@ -296,34 +324,5 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
     } catch (error: any) {
         functions.logger.error(`Error during hard reset for user ${uid}:`, error);
         throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
-    }
-});
-
-
-/**
- * A callable function for an admin to change a user's password.
- */
-export const changeUserPassword = functions.https.onCall(async (data, context) => {
-    // Check if the request is made by an authenticated admin user.
-    if (context.auth?.token.isAdmin !== true) {
-        throw new functions.https.HttpsError('permission-denied', 'Only admins can change user passwords.');
-    }
-
-    const { uid, password } = data;
-    if (!uid || !password) {
-        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with "uid" and "password" arguments.');
-    }
-
-    if (password.length < 6) {
-        throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 6 characters long.');
-    }
-
-    try {
-        await admin.auth().updateUser(uid, { password });
-        functions.logger.log(`Successfully changed password for user: ${uid}`);
-        return { success: true, message: 'Password updated successfully.' };
-    } catch (error: any) {
-        functions.logger.error(`Error changing password for user ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', 'Failed to update password.');
     }
 });
