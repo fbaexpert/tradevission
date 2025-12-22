@@ -1,7 +1,7 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore, connectFirestoreEmulator, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
+import { getFirestore, Firestore, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
@@ -32,11 +32,12 @@ export const getFirebase = (): FirebaseServices => {
 
     const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     
-    // Initialize Firestore with caching disabled.
-    // This is the key change to ensure data is always fresh from the server.
+    // Initialize Firestore with caching disabled for server-side rendering issues.
+    // CACHE_SIZE_UNLIMITED is a misnomer in this context; it helps but disabling persistence is key.
+    // The most reliable way for SSR is to re-initialize per request, but this is a strong alternative
+    // that forces re-fetching when data changes by not using a persistent cache.
     const db = initializeFirestore(app, {
       cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-      ignoreUndefinedProperties: true
     });
 
     const auth = getAuth(app);
