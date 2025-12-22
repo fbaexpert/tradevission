@@ -32,7 +32,9 @@ import {
   KeyRound,
   Wrench,
   Power,
-  Gift
+  Gift,
+  Contact,
+  Copyright,
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,6 +96,10 @@ interface PlanTag {
   name: string;
   color: string;
 }
+interface FooterSettings {
+  supportEmail: string;
+  copyrightText: string;
+}
 
 interface AdminSettings {
   maintenanceMode: boolean;
@@ -114,6 +120,7 @@ interface AdminSettings {
   };
   planTags: PlanTag[];
   cpmPresale: CpmPresaleSettings;
+  footer: FooterSettings;
 }
 
 const defaultSettings: AdminSettings = {
@@ -146,6 +153,10 @@ const defaultSettings: AdminSettings = {
   },
   planTags: [],
   cpmPresale: { packages: [] },
+  footer: {
+    supportEmail: "tradevissionn@gmail.com",
+    copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
+  }
 };
 
 
@@ -163,7 +174,16 @@ export default function AdminSettingsPage() {
     const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        setSettings({ ...defaultSettings, ...data });
+        // Deep merge to ensure new default fields are added if they don't exist
+        const mergedSettings = {
+          ...defaultSettings,
+          ...data,
+          withdrawal: { ...defaultSettings.withdrawal, ...(data.withdrawal || {}) },
+          depositBoost: { ...defaultSettings.depositBoost, ...(data.depositBoost || {}) },
+          commander: { ...defaultSettings.commander, ...(data.commander || {}) },
+          footer: { ...defaultSettings.footer, ...(data.footer || {}) },
+        };
+        setSettings(mergedSettings);
       } else {
         setDoc(settingsDocRef, defaultSettings);
         setSettings(defaultSettings);
@@ -237,6 +257,12 @@ export default function AdminSettingsPage() {
       commander: { ...prev.commander, [field]: Number(value) },
     }));
   }
+  const handleFooterChange = (field: 'supportEmail' | 'copyrightText', value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      footer: { ...prev.footer, [field]: value },
+    }));
+  };
   const handleTierChange = (id: string, field: 'referrals' | 'bonus', value: number) => {
     setSettings(prev => ({
         ...prev,
@@ -463,6 +489,30 @@ export default function AdminSettingsPage() {
                           </div>
                       ))}
                        <Button variant="outline" onClick={addTag}><PlusCircle className="mr-2"/> Add Tag</Button>
+                  </div>
+              </div>
+
+               <div className="space-y-4 rounded-lg border p-4">
+                  <Label className="text-base flex items-center gap-2 font-bold text-white"><Contact/> Footer Settings</Label>
+                   <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
+                      <div className="space-y-2">
+                          <Label htmlFor="footer-email">Contact Email</Label>
+                          <Input 
+                              id="footer-email" 
+                              type="email" 
+                              value={settings.footer.supportEmail} 
+                              onChange={(e) => handleFooterChange("supportEmail", e.target.value)}
+                          />
+                      </div>
+                       <div className="space-y-2">
+                          <Label htmlFor="footer-copyright">Copyright Text</Label>
+                          <Input 
+                              id="footer-copyright" 
+                              type="text" 
+                              value={settings.footer.copyrightText} 
+                              onChange={(e) => handleFooterChange("copyrightText", e.target.value)}
+                          />
+                      </div>
                   </div>
               </div>
             </div>
