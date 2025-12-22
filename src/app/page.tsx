@@ -140,14 +140,16 @@ function LandingPageClientLogic() {
 
 
 // This is a Server Component wrapper. It handles server-side logic like redirects.
-export default function LandingPage({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
+export default function LandingPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
   
   // --- SERVER-SIDE REDIRECT ---
-  const mode = searchParams?.mode;
-  const oobCode = searchParams?.oobCode;
+  const mode = searchParams?.['mode'];
+  const oobCode = searchParams?.['oobCode'];
   
   if (mode === 'resetPassword' && oobCode) {
-    const params = new URLSearchParams(searchParams as any);
+    const params = new URLSearchParams();
+    params.set('mode', mode);
+    params.set('oobCode', Array.isArray(oobCode) ? oobCode[0] : oobCode);
     redirect(`/reset-password?${params.toString()}`);
   }
 
