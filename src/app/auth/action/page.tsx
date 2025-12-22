@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -52,7 +53,7 @@ export default function AuthActionPage() {
             setMode(modeParam);
             setActionCode(codeParam);
         } else {
-            setError("Invalid or incomplete link. Please request a new link.");
+            setError("Invalid or incomplete link. Please check the link or request a new one.");
             setLoading(false);
         }
     }, [searchParams]);
@@ -74,7 +75,6 @@ export default function AuthActionPage() {
                 setLoading(false);
             }
         }
-        // This effect runs when mode, actionCode, or auth becomes available.
     }, [mode, actionCode, auth]);
 
     const handleResetPassword = async (data: PasswordFormData) => {
