@@ -29,9 +29,13 @@ export default function AuthActionPage() {
     const { auth } = useFirebase();
     const router = useRouter();
     const searchParams = useSearchParams();
+    
+    // State to hold parameters from URL
     const [mode, setMode] = useState<string | null>(null);
     const [actionCode, setActionCode] = useState<string | null>(null);
+    
     const [loading, setLoading] = useState(true);
+    const [isValidCode, setIsValidCode] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
@@ -44,34 +48,34 @@ export default function AuthActionPage() {
         const modeParam = searchParams.get('mode');
         const codeParam = searchParams.get('oobCode');
 
-        setMode(modeParam);
-        setActionCode(codeParam);
-
-        if (!modeParam || !codeParam) {
-            setError("Invalid link. Please try resetting your password again.");
-            setLoading(false);
-            return;
-        }
-
-        if (modeParam === 'resetPassword') {
-            if (!auth) {
-                setError("Authentication service is not available.");
-                setLoading(false);
-                return;
-            }
-            verifyPasswordResetCode(auth, codeParam)
-                .then(() => {
-                    setLoading(false);
-                })
-                .catch((err) => {
-                    setError("Invalid or expired password reset link. Please request a new one.");
-                    setLoading(false);
-                });
+        if (modeParam && codeParam) {
+            setMode(modeParam);
+            setActionCode(codeParam);
         } else {
-            setError("Unsupported action. Please check the link and try again.");
+            setError("Invalid or incomplete link. Please request a new link.");
             setLoading(false);
         }
-    }, [searchParams, auth]);
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (mode && actionCode && auth) {
+            if (mode === 'resetPassword') {
+                verifyPasswordResetCode(auth, actionCode)
+                    .then(() => {
+                        setIsValidCode(true);
+                        setLoading(false);
+                    })
+                    .catch((err) => {
+                        setError("Invalid or expired password reset link. Please request a new one.");
+                        setLoading(false);
+                    });
+            } else {
+                setError(`Unsupported action mode: '${mode}'. Please check the link.`);
+                setLoading(false);
+            }
+        }
+        // This effect runs when mode, actionCode, or auth becomes available.
+    }, [mode, actionCode, auth]);
 
     const handleResetPassword = async (data: PasswordFormData) => {
         if (!auth || !actionCode) {
@@ -84,7 +88,7 @@ export default function AuthActionPage() {
             await confirmPasswordReset(auth, actionCode, data.newPassword);
             setSuccess("Your password has been successfully reset. You can now log in with your new password.");
         } catch (err: any) {
-            setError("Failed to reset password. The link may have expired. Please try again.");
+            setError("Failed to reset password. The link may have expired or been used already. Please request a new one.");
         } finally {
             setLoading(false);
         }
@@ -115,7 +119,7 @@ export default function AuthActionPage() {
             );
         }
 
-        if (mode === 'resetPassword') {
+        if (isValidCode && mode === 'resetPassword') {
             return (
                 <form onSubmit={form.handleSubmit(handleResetPassword)} className="space-y-4">
                     <div className="space-y-2">
@@ -136,6 +140,7 @@ export default function AuthActionPage() {
             );
         }
 
+        // Fallback for any other state
         return null;
     };
 
@@ -148,7 +153,7 @@ export default function AuthActionPage() {
                         {mode === 'resetPassword' ? 'Reset Your Password' : 'Authentication Action'}
                     </CardTitle>
                     <CardDescription className="text-center">
-                        {mode === 'resetPassword' && !success && "Enter your new password below."}
+                        {isValidCode && mode === 'resetPassword' && !success && "Enter your new password below."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
