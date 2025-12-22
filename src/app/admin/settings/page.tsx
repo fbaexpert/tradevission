@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -35,6 +36,8 @@ import {
   Gift,
   Contact,
   Copyright,
+  FileText,
+  Edit,
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -158,6 +161,13 @@ const defaultSettings: AdminSettings = {
     copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
   }
 };
+
+const predefinedPages = [
+    { slug: 'about-us', title: 'About Us' },
+    { slug: 'privacy-policy', title: 'Privacy Policy' },
+    { slug: 'terms-of-service', title: 'Terms of Service' },
+    { slug: 'refund-policy', title: 'Refund Policy' },
+]
 
 
 export default function AdminSettingsPage() {
@@ -465,56 +475,62 @@ export default function AdminSettingsPage() {
 
           <TabsContent value="appearance" className="mt-6">
             <div className="space-y-8">
-              <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><Tag/> Plan Tags</Label>
-                  <p className="text-sm text-muted-foreground">Create custom tags to display on investment plans.</p>
-                   <div className="space-y-3 pt-4 border-t">
-                      {settings.planTags.map((tag) => (
-                          <div key={tag.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
-                              <div className="space-y-2">
-                                  <Label htmlFor={`tag-name-${tag.id}`}>Tag Name</Label>
-                                  <Input id={`tag-name-${tag.id}`} value={tag.name} onChange={(e) => handleTagChange(tag.id, 'name', e.target.value)} />
-                              </div>
-                               <div className="space-y-2">
-                                  <Label htmlFor={`tag-color-${tag.id}`}>Tag Color</Label>
-                                  <div className="flex items-center gap-2 h-10 border border-input rounded-md bg-background px-3">
-                                      <Palette className="h-4 w-4 text-muted-foreground"/>
-                                      <Input id={`tag-color-${tag.id}`} type="color" value={tag.color} onChange={(e) => handleTagChange(tag.id, 'color', e.target.value)} className="p-0 border-0 h-8 w-8 bg-transparent"/>
-                                      <span className="font-mono">{tag.color}</span>
-                                  </div>
-                              </div>
-                              <div className="flex justify-end">
-                                  <Button variant="destructive" size="icon" onClick={() => removeTag(tag.id)}><Trash2/></Button>
-                              </div>
-                          </div>
-                      ))}
-                       <Button variant="outline" onClick={addTag}><PlusCircle className="mr-2"/> Add Tag</Button>
-                  </div>
-              </div>
+                <div className="space-y-4 rounded-lg border p-4">
+                  <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer & Policy Pages</Label>
+                  <p className="text-sm text-muted-foreground">Manage footer content and edit important pages like your privacy policy and terms of service.</p>
+                   <div className="space-y-4 pt-4 border-t">
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="footer-email">Contact Email</Label>
+                            <Input id="footer-email" type="email" value={settings.footer.supportEmail} onChange={(e) => handleFooterChange("supportEmail", e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="footer-copyright">Copyright Text</Label>
+                            <Input id="footer-copyright" type="text" value={settings.footer.copyrightText} onChange={(e) => handleFooterChange("copyrightText", e.target.value)} />
+                        </div>
+                     </div>
+                      <div className="space-y-3 pt-4 border-t">
+                         <Label>Editable Pages</Label>
+                          {predefinedPages.map((page) => (
+                            <div key={page.slug} className="flex items-center justify-between p-3 rounded-md bg-muted/30">
+                               <p className="font-medium text-white">{page.title}</p>
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={`/admin/pages/edit/${page.slug}`}>
+                                        <Edit className="mr-2 h-4 w-4" /> Edit Page
+                                    </Link>
+                                </Button>
+                            </div>
+                          ))}
+                      </div>
+                   </div>
+                </div>
 
-               <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><Contact/> Footer Settings</Label>
-                   <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
-                      <div className="space-y-2">
-                          <Label htmlFor="footer-email">Contact Email</Label>
-                          <Input 
-                              id="footer-email" 
-                              type="email" 
-                              value={settings.footer.supportEmail} 
-                              onChange={(e) => handleFooterChange("supportEmail", e.target.value)}
-                          />
-                      </div>
-                       <div className="space-y-2">
-                          <Label htmlFor="footer-copyright">Copyright Text</Label>
-                          <Input 
-                              id="footer-copyright" 
-                              type="text" 
-                              value={settings.footer.copyrightText} 
-                              onChange={(e) => handleFooterChange("copyrightText", e.target.value)}
-                          />
-                      </div>
-                  </div>
-              </div>
+                <div className="space-y-4 rounded-lg border p-4">
+                    <Label className="text-base flex items-center gap-2 font-bold text-white"><Tag/> Plan Tags</Label>
+                    <p className="text-sm text-muted-foreground">Create custom tags to display on investment plans.</p>
+                     <div className="space-y-3 pt-4 border-t">
+                        {settings.planTags.map((tag) => (
+                            <div key={tag.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center p-3 rounded-md bg-muted/30">
+                                <div className="space-y-2">
+                                    <Label htmlFor={`tag-name-${tag.id}`}>Tag Name</Label>
+                                    <Input id={`tag-name-${tag.id}`} value={tag.name} onChange={(e) => handleTagChange(tag.id, 'name', e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor={`tag-color-${tag.id}`}>Tag Color</Label>
+                                    <div className="flex items-center gap-2 h-10 border border-input rounded-md bg-background px-3">
+                                        <Palette className="h-4 w-4 text-muted-foreground"/>
+                                        <Input id={`tag-color-${tag.id}`} type="color" value={tag.color} onChange={(e) => handleTagChange(tag.id, 'color', e.target.value)} className="p-0 border-0 h-8 w-8 bg-transparent"/>
+                                        <span className="font-mono">{tag.color}</span>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button variant="destructive" size="icon" onClick={() => removeTag(tag.id)}><Trash2/></Button>
+                                </div>
+                            </div>
+                        ))}
+                         <Button variant="outline" onClick={addTag}><PlusCircle className="mr-2"/> Add Tag</Button>
+                    </div>
+                </div>
             </div>
           </TabsContent>
         </Tabs>

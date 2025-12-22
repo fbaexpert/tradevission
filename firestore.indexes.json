@@ -130,6 +130,15 @@
         { "fieldPath": "isEnabled", "order": "ASCENDING" },
         { "fieldPath": "minDeposit", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "websitePages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inFooter", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
