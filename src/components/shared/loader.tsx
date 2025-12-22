@@ -40,7 +40,7 @@ export default function Loader() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm gap-6">
       <div className="rocket-container">
-          <LoaderCircle className="h-20 w-20 text-primary animate-spin" />
+          <Rocket className="h-20 w-20 text-primary" />
       </div>
       <p 
         className={`text-lg font-medium text-muted-foreground transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'}`}
@@ -61,4 +61,3 @@ export default function Loader() {
     </div>
   );
 }
-
