@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDocs, collection } from "firebase/firestore";
 import Link from "next/link";
 import {
   Card,
@@ -47,6 +47,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { deletePageAction } from "../pages/actions";
 
 
 // --- Interface Definitions ---
@@ -102,6 +104,12 @@ interface PlanTag {
 interface FooterSettings {
   supportEmail: string;
   copyrightText: string;
+}
+interface PageData {
+    id: string;
+    slug: string;
+    title: string;
+    category: string;
 }
 
 interface AdminSettings {
@@ -162,17 +170,11 @@ const defaultSettings: AdminSettings = {
   }
 };
 
-const predefinedPages = [
-    { slug: 'about-us', title: 'About Us' },
-    { slug: 'privacy-policy', title: 'Privacy Policy' },
-    { slug: 'terms-of-service', title: 'Terms of Service' },
-    { slug: 'refund-policy', title: 'Refund Policy' },
-]
-
 
 export default function AdminSettingsPage() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
+  const [pages, setPages] = useState<PageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -181,10 +183,9 @@ export default function AdminSettingsPage() {
     if (!db) return;
 
     const settingsDocRef = doc(db, "system", "settings");
-    const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        // Deep merge to ensure new default fields are added if they don't exist
         const mergedSettings = {
           ...defaultSettings,
           ...data,
@@ -201,7 +202,16 @@ export default function AdminSettingsPage() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const pagesCollectionRef = collection(db, "websitePages");
+    const unsubscribePages = onSnapshot(pagesCollectionRef, (snapshot) => {
+        const pagesData = snapshot.docs.map(doc => ({ id: doc.id, slug: doc.data().slug, title: doc.data().title, category: doc.data().category })) as PageData[];
+        setPages(pagesData);
+    });
+
+    return () => {
+        unsubscribeSettings();
+        unsubscribePages();
+    };
   }, [db]);
 
   const handleSave = () => {
@@ -224,6 +234,22 @@ export default function AdminSettingsPage() {
     }).finally(() => {
       setSaving(false);
     });
+  };
+  
+  const handleDeletePage = async (page: PageData) => {
+    try {
+      await deletePageAction(page.slug);
+      toast({
+        title: "Page Deleted",
+        description: `The "${page.title}" page has been successfully deleted.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "An error occurred while deleting the page.",
+      });
+    }
   };
 
   const handleSettingChange = (
@@ -490,15 +516,51 @@ export default function AdminSettingsPage() {
                         </div>
                      </div>
                       <div className="space-y-3 pt-4 border-t">
-                         <Label>Editable Pages</Label>
-                          {predefinedPages.map((page) => (
-                            <div key={page.slug} className="flex items-center justify-between p-3 rounded-md bg-muted/30">
-                               <p className="font-medium text-white">{page.title}</p>
+                         <div className="flex justify-between items-center">
+                            <Label>Editable Pages</Label>
+                             <Button asChild variant="outline" size="sm">
+                                <Link href="/admin/pages/new">
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Create New Page
+                                </Link>
+                            </Button>
+                         </div>
+                          {pages.map((page) => (
+                            <div key={page.id} className="flex items-center justify-between p-3 rounded-md bg-muted/30">
+                               <div>
+                                 <p className="font-medium text-white">{page.title}</p>
+                                 <p className="text-xs text-muted-foreground">{page.category}</p>
+                               </div>
+                               <div className="flex items-center gap-2">
                                 <Button asChild variant="outline" size="sm">
                                     <Link href={`/admin/pages/edit/${page.slug}`}>
-                                        <Edit className="mr-2 h-4 w-4" /> Edit Page
+                                        <Edit className="mr-2 h-4 w-4" /> Edit
                                     </Link>
                                 </Button>
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="destructive" size="icon">
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete "{page.title}"?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will permanently delete the page. This action cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeletePage(page)}
+                                          className="bg-destructive hover:bg-destructive/90"
+                                        >
+                                          Yes, Delete Page
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                               </div>
                             </div>
                           ))}
                       </div>
