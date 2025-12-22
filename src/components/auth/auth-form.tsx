@@ -330,19 +330,25 @@ export default function AuthForm() {
     setResetLoading(true);
     setResetError(null);
     if (!auth) return;
+
     try {
+        console.log('Sending reset email to:', values.email);
         await sendPasswordResetEmail(auth, values.email);
+        
+        console.log('Email sent successfully');
         toast({
             title: "Password Reset Email Sent",
             description: "Please check your inbox (and spam folder) for a link to reset your password.",
         });
         setIsResetDialogOpen(false);
         resetPasswordForm.reset();
-    } catch (err: any) {
-        if (err.code === 'auth/user-not-found') {
+
+    } catch (error: any) {
+        console.log('FIREBASE ERROR:', error.code, error.message);
+        if (error.code === 'auth/user-not-found') {
             setResetError("No user found with this email address.");
         } else {
-            setResetError("An error occurred. Please try again.");
+            setResetError("An error occurred while sending the email. Please try again.");
         }
     } finally {
         setResetLoading(false);
