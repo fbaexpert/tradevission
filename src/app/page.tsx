@@ -38,7 +38,6 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
   </div>
 );
 
-
 export default function LandingPage() {
   const searchParams = useSearchParams();
   const [loginHref, setLoginHref] = useState("/login");
@@ -48,18 +47,15 @@ export default function LandingPage() {
 
   useEffect(() => {
     const refId = searchParams.get('ref');
-    let finalHref = "/login";
-    
     if (refId) {
-      localStorage.setItem('tradevission_ref', refId);
-      finalHref = `/login?ref=${refId}`;
+        localStorage.setItem('tradevission_ref', refId);
+        setLoginHref(`/login?ref=${refId}`);
     } else {
-      const storedRefId = localStorage.getItem('tradevission_ref');
-      if (storedRefId) {
-        finalHref = `/login?ref=${storedRefId}`;
-      }
+        const storedRefId = localStorage.getItem('tradevission_ref');
+        if (storedRefId) {
+            setLoginHref(`/login?ref=${storedRefId}`);
+        }
     }
-    setLoginHref(finalHref);
   }, [searchParams]);
 
   useEffect(() => {

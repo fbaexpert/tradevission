@@ -3,16 +3,14 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { useFirebase } from '@/lib/firebase/provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Footer } from "@/components/shared/footer";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/shared/logo";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { format } from "date-fns";
-
 
 interface PageContent {
     title: string;
@@ -25,7 +23,7 @@ export default function LegalPage() {
   const { db } = useFirebase();
   const router = useRouter();
   const params = useParams();
-  const slug = params.slug as string;
+  const slug = params ? params.slug as string : "";
 
   const [pageContent, setPageContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,14 +36,14 @@ export default function LegalPage() {
       setLoading(true);
       setError(null);
       try {
-        // Use the page ID (slug from URL) to fetch the document
-        const docRef = doc(db, "pages", slug);
-        const docSnap = await getDoc(docRef);
+        const q = query(collection(db, "pages"), where("slug", "==", slug), where("isActive", "==", true));
+        const querySnapshot = await getDocs(q);
 
-        if (docSnap.exists()) {
-          setPageContent(docSnap.data() as PageContent);
+        if (!querySnapshot.empty) {
+            const docSnap = querySnapshot.docs[0];
+            setPageContent(docSnap.data() as PageContent);
         } else {
-          setError("The page you are looking for does not exist.");
+            setError("The page you are looking for does not exist or is not active.");
         }
       } catch (err) {
         setError("Failed to load the page content.");
@@ -113,7 +111,6 @@ export default function LegalPage() {
             )}
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

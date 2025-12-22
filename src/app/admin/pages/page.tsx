@@ -26,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoaderCircle, FileText, PlusCircle, Trash2, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,10 +67,6 @@ export default function AdminPages() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPage, setEditingPage] = useState<WebsitePage | null>(null);
-
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
   const form = useForm<PageFormData>({
     resolver: zodResolver(pageSchema),
@@ -115,51 +110,13 @@ export default function AdminPages() {
     };
   }, [db, toast]);
 
-  const handleCreateCategory = async () => {
-    if (!newCategoryName.trim() || !db) return;
-    setIsCreatingCategory(true);
-    try {
-        await addDoc(collection(db, "categories"), {
-            name: newCategoryName.trim(),
-            createdAt: serverTimestamp(),
-        });
-        toast({ title: "Category Added" });
-        form.setValue("category", newCategoryName.trim());
-        setNewCategoryName("");
-        setIsCategoryDialogOpen(false);
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message || "Could not add category." });
-    } finally {
-        setIsCreatingCategory(false);
-    }
-  }
-
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!db) return;
-    try {
-        await deleteDoc(doc(db, "categories", categoryId));
-        toast({ title: "Category Deleted" });
-    } catch (error) {
-        toast({ variant: "destructive", title: "Error", description: "Could not delete category." });
-    }
-  }
-
-
-  const handleCategoryChange = (value: string) => {
-    if (value === "create_new") {
-      setIsCategoryDialogOpen(true);
-    } else {
-      form.setValue("category", value);
-    }
-  };
-
   const onSubmit = async (data: PageFormData) => {
     if (!db) return;
     setIsSubmitting(true);
     
     const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-    const dataToSave = {
+    const dataToSave: any = {
         ...data,
         slug,
         updatedAt: serverTimestamp(),
@@ -214,7 +171,6 @@ export default function AdminPages() {
   };
 
   return (
-    <>
     <div className="space-y-8">
       <Card>
         <CardHeader>
@@ -240,15 +196,12 @@ export default function AdminPages() {
                   name="category"
                   control={form.control}
                   render={({ field }) => (
-                    <Select onValueChange={handleCategoryChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                         <SelectTrigger id="category"><SelectValue placeholder="Select a category"/></SelectTrigger>
                         <SelectContent>
                             {pageCategories.map(cat => (
                                 <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                             ))}
-                            <SelectItem value="create_new" className="text-primary font-bold">
-                                + Create new category...
-                            </SelectItem>
                         </SelectContent>
                     </Select>
                   )}
@@ -361,66 +314,5 @@ export default function AdminPages() {
         </CardContent>
       </Card>
     </div>
-
-    <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Manage Categories</DialogTitle>
-          <DialogDescription>
-            Add or delete categories for your pages.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4 space-y-4">
-            <div>
-                <Label htmlFor="new-category-name" className="text-white font-bold">Create New Category</Label>
-                <div className="flex items-center gap-2 mt-2">
-                    <Input
-                        id="new-category-name"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        placeholder="e.g., Resources"
-                        disabled={isCreatingCategory}
-                    />
-                    <Button onClick={handleCreateCategory} disabled={isCreatingCategory || !newCategoryName.trim()}>
-                        {isCreatingCategory ? <LoaderCircle className="animate-spin" /> : "Add"}
-                    </Button>
-                </div>
-            </div>
-            <div className="space-y-2 pt-4 border-t">
-                <Label className="text-white font-bold">Existing Categories</Label>
-                 <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
-                    {pageCategories.map((category) => (
-                        <div key={category.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                            <span className="font-medium">{category.name}</span>
-                             <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete Category?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Are you sure you want to delete the "{category.name}" category? This will not delete the pages within it.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteCategory(category.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        </div>
-                    ))}
-                 </div>
-            </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-    </>
   );
 }
