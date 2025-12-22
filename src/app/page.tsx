@@ -2,12 +2,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus, LoaderCircle } from "lucide-react";
+import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { redirect } from 'next/navigation';
+import { redirect, useSearchParams } from "next/navigation";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -24,38 +23,14 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
   </div>
 );
 
-export default function LandingPage({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
-  
-  // --- SERVER-SIDE REDIRECT ---
-  // This is the primary fix. It runs on the server before the page is sent to the client.
-  const mode = searchParams?.mode;
-  const oobCode = searchParams?.oobCode;
-  
-  if (mode === 'resetPassword' && oobCode) {
-    const params = new URLSearchParams(searchParams as any);
-    redirect(`/reset-password?${params.toString()}`);
-  }
 
-  // --- CLIENT-SIDE LOGIC (for referral codes and as a backup) ---
-  const router = useRouter();
-  const clientSearchParams = useSearchParams();
+// This is a Client Component that handles client-side logic like referrals.
+function LandingPageClientLogic() {
+  const searchParams = useSearchParams();
   const [loginHref, setLoginHref] = useState("/login");
-  const [isClientRedirecting, setIsClientRedirecting] = useState(false);
 
   useEffect(() => {
-    // --- Client-side backup for password reset ---
-    // This will run if for some reason the server-side redirect fails.
-    const clientMode = clientSearchParams.get('mode');
-    const clientOobCode = clientSearchParams.get('oobCode');
-    
-    if (clientMode === 'resetPassword' && clientOobCode) {
-        setIsClientRedirecting(true);
-        router.push(`/reset-password?${clientSearchParams.toString()}`);
-        return;
-    }
-
-    // --- Referral Code Logic ---
-    const refId = clientSearchParams.get('ref');
+    const refId = searchParams.get('ref');
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
         setLoginHref(`/login?ref=${refId}`);
@@ -65,19 +40,10 @@ export default function LandingPage({ searchParams }: { searchParams: { [key: st
             setLoginHref(`/login?ref=${storedRefId}`);
         }
     }
-  }, [clientSearchParams, router]);
-
-  // If a redirect is pending, show a loader to prevent the user from seeing the landing page.
-  if (isClientRedirecting) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <LoaderCircle className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
+  }, [searchParams]);
 
   return (
-    <div className="bg-background text-foreground flex flex-col">
+      <div className="bg-background text-foreground flex flex-col">
       {/* Header */}
       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
         <div className="flex items-center gap-3">
@@ -170,4 +136,21 @@ export default function LandingPage({ searchParams }: { searchParams: { [key: st
       </main>
     </div>
   );
+}
+
+
+// This is a Server Component wrapper. It handles server-side logic like redirects.
+export default function LandingPage({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
+  
+  // --- SERVER-SIDE REDIRECT ---
+  const mode = searchParams?.mode;
+  const oobCode = searchParams?.oobCode;
+  
+  if (mode === 'resetPassword' && oobCode) {
+    const params = new URLSearchParams(searchParams as any);
+    redirect(`/reset-password?${params.toString()}`);
+  }
+
+  // If no redirect is needed, render the client component with the landing page UI.
+  return <LandingPageClientLogic />;
 }
