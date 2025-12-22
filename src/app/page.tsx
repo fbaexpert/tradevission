@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -24,20 +23,19 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 );
 
 
-// This is now a full Client Component to handle all client-side logic.
 export default function LandingPage() {
   const [loginHref, setLoginHref] = useState("/login");
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // --- CLIENT-SIDE REDIRECT (Backup) ---
+    // --- Password Reset Redirect ---
     const mode = searchParams.get('mode');
     const oobCode = searchParams.get('oobCode');
 
     if (mode === 'resetPassword' && oobCode) {
-        const params = new URLSearchParams(window.location.search);
-        window.location.href = `/reset-password?${params.toString()}`;
-        return;
+        // Use window.location.href for immediate redirect
+        window.location.href = `/reset-password?${searchParams.toString()}`;
+        return; // Stop further execution
     }
 
     // --- Referral Link Logic ---
