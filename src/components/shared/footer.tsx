@@ -29,7 +29,6 @@ const defaultFooterSettings: FooterSettings = {
 };
 
 async function getFooterData() {
-    // This function tells Next.js not to cache the data from this fetch.
     noStore();
     try {
         const { db } = getFirebase();
@@ -45,7 +44,7 @@ async function getFooterData() {
 
         const settings = settingsDoc.exists() ? settingsDoc.data() as FooterSettings : defaultFooterSettings;
         const pageCategories = systemSettingsDoc.exists() ? systemSettingsDoc.data().pageCategories || [] : [];
-        const pages = pagesSnapshot.docs.map(doc => doc.data() as WebPage);
+        const pages = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WebPage));
 
         const groupedPages = pageCategories.map((category: PageCategory) => ({
             ...category,
@@ -66,9 +65,9 @@ export async function Footer() {
   return (
     <footer className="border-t border-border/20 bg-background text-foreground">
         <div className="container mx-auto px-6 py-12">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center md:text-left">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 {/* Column 1: Logo and Tagline */}
-                <div className="flex flex-col items-center md:items-start space-y-4 lg:col-span-1">
+                <div className="flex flex-col items-center text-center md:items-start md:text-left space-y-4 lg:col-span-1">
                     <div className="flex items-center gap-3">
                         <Logo />
                         <h1 className="text-2xl font-bold text-white font-headline tracking-tighter">
@@ -84,7 +83,7 @@ export async function Footer() {
                 {groupedPages.map((category: any) => (
                     <div key={category.id} className="flex flex-col items-center md:items-start">
                         <h4 className="font-bold text-white mb-4">{category.name}</h4>
-                        <ul className="space-y-2">
+                        <ul className="space-y-2 text-center md:text-left">
                            {category.pages.map((page: WebPage) => (
                                <li key={page.slug}>
                                    <Link href={`/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -117,4 +116,3 @@ export async function Footer() {
     </footer>
   );
 }
-
