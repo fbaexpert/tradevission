@@ -806,8 +806,8 @@ export default function AdminUsersPage() {
     try {
       await deleteUserAccount({ uid: user.id });
       toast({
-        title: "User Deleted",
-        description: `User ${user.email} has been permanently deleted.`,
+        title: "User Deletion Process Started",
+        description: `The account for ${user.email} is being removed.`,
       });
     } catch (error: any) {
       console.error("Deletion failed:", error);
@@ -1043,7 +1043,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data. This action is irreversible.
+                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data, including from storage. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -1642,3 +1642,5 @@ export default function AdminUsersPage() {
     </>
   );
 }
+
+    

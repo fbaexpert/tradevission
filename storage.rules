@@ -9,30 +9,29 @@ service firebase.storage {
     }
 
     // Allow users to upload their own deposit screenshots.
-    // They can write to a path that includes their user ID.
-    // They can't read/list other users' files.
     match /deposit_screenshots/{userId}/{depositId} {
       allow create: if request.auth != null && request.auth.uid == userId;
     }
     
-     // Allow users to upload their KYC documents.
+    // Allow users to upload their KYC documents.
     match /kyc_documents/{userId}/{document} {
       allow create: if request.auth != null && request.auth.uid == userId;
     }
 
     // Admins can read any screenshot or kyc document.
-    // This assumes you have a custom claim 'isAdmin' set to true on the admin's token.
     match /deposit_screenshots/{userId}/{allPaths=**} {
        allow read: if request.auth != null && request.auth.token.email == "ummarfarooq38990@gmail.com";
     }
-     match /kyc_documents/{userId}/{allPaths=**} {
+    match /kyc_documents/{userId}/{allPaths=**} {
        allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == "ummarfarooq38990@gmail.com");
     }
 
-    // Allow admin functions to perform any action on any file.
+    // Allow admin functions (and admins in general) to perform any action on any file.
     // This is crucial for the deleteUser function to be able to delete user files.
     match /{allPaths=**} {
       allow delete: if request.auth != null && request.auth.token.email == "ummarfarooq38990@gmail.com";
     }
   }
 }
+
+    
