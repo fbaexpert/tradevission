@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, getDocs, collection, query, where, orderBy, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -32,13 +32,7 @@ import {
   KeyRound,
   Wrench,
   Power,
-  Eye,
-  Gift,
-  Contact,
-  Copyright,
-  FilePlus,
-  FileText,
-  Edit
+  Gift
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,11 +42,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertTitle } from "@/components/ui/alert";
-import Link from "next/link";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 // --- Interface Definitions ---
@@ -105,23 +94,6 @@ interface PlanTag {
   name: string;
   color: string;
 }
-interface PageCategory {
-  id: string;
-  name: string;
-}
-interface SimpleFooterSettings {
-    contact: string;
-    copyright: string;
-}
-interface WebPage {
-    id: string;
-    title: string;
-    slug: string;
-    category: string;
-    isActive: boolean;
-    inFooter: boolean;
-    order: number;
-}
 
 interface AdminSettings {
   maintenanceMode: boolean;
@@ -141,7 +113,6 @@ interface AdminSettings {
     rewards: FlipReward[]
   };
   planTags: PlanTag[];
-  pageCategories: PageCategory[];
   cpmPresale: CpmPresaleSettings;
 }
 
@@ -174,7 +145,6 @@ const defaultSettings: AdminSettings = {
     rewards: [],
   },
   planTags: [],
-  pageCategories: [],
   cpmPresale: { packages: [] },
 };
 
@@ -182,8 +152,6 @@ const defaultSettings: AdminSettings = {
 export default function AdminSettingsPage() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
-  const [footerSettings, setFooterSettings] = useState<SimpleFooterSettings>({ contact: '', copyright: '' });
-  const [pages, setPages] = useState<WebPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -192,7 +160,7 @@ export default function AdminSettingsPage() {
     if (!db) return;
 
     const settingsDocRef = doc(db, "system", "settings");
-    const unsubSettings = onSnapshot(settingsDocRef, (doc) => {
+    const unsubscribe = onSnapshot(settingsDocRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
         setSettings({ ...defaultSettings, ...data });
@@ -203,23 +171,7 @@ export default function AdminSettingsPage() {
       setLoading(false);
     });
 
-    const footerDocRef = doc(db, "site_footer", "content");
-    const unsubFooter = onSnapshot(footerDocRef, (doc) => {
-        if(doc.exists()) {
-            setFooterSettings(doc.data() as SimpleFooterSettings);
-        }
-    });
-    
-    const pagesQuery = query(collection(db, "websitePages"), orderBy("order", "asc"));
-    const unsubPages = onSnapshot(pagesQuery, (snapshot) => {
-        setPages(snapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as WebPage)));
-    });
-
-    return () => {
-        unsubSettings();
-        unsubFooter();
-        unsubPages();
-    };
+    return () => unsubscribe();
   }, [db]);
 
   const handleSave = () => {
@@ -227,12 +179,7 @@ export default function AdminSettingsPage() {
     setSaving(true);
     
     const settingsDocRef = doc(db, "system", "settings");
-    const footerDocRef = doc(db, "site_footer", "content");
-
-    const settingsPromise = setDoc(settingsDocRef, settings, { merge: true });
-    const footerPromise = setDoc(footerDocRef, footerSettings, { merge: true });
-
-    Promise.all([settingsPromise, footerPromise]).then(() => {
+    setDoc(settingsDocRef, settings, { merge: true }).then(() => {
       toast({
         title: "Settings Saved",
         description: "All settings have been updated successfully.",
@@ -248,16 +195,6 @@ export default function AdminSettingsPage() {
       setSaving(false);
     });
   };
-  
-  const handleDeletePage = async (pageId: string) => {
-      if (!db) return;
-      try {
-          await deleteDoc(doc(db, "websitePages", pageId));
-          toast({title: "Page Deleted"});
-      } catch (error) {
-          toast({variant: "destructive", title: "Deletion Failed"});
-      }
-  }
 
   const handleSettingChange = (
     key: keyof AdminSettings,
@@ -324,18 +261,6 @@ export default function AdminSettingsPage() {
   const removeTag = (id: string) => {
     setSettings(prev => ({...prev, planTags: prev.planTags.filter(t => t.id !== id)}));
   };
-  const handleCategoryChange = (id: string, value: string) => {
-    setSettings(prev => ({
-        ...prev,
-        pageCategories: prev.pageCategories.map(c => c.id === id ? { ...c, name: value } : c)
-    }));
-  };
-  const addCategory = () => {
-    setSettings(prev => ({ ...prev, pageCategories: [...prev.pageCategories, {id: nanoid(), name: 'New Category' }]}));
-  };
-  const removeCategory = (id: string) => {
-    setSettings(prev => ({...prev, pageCategories: prev.pageCategories.filter(c => c.id !== id)}));
-  };
 
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -355,7 +280,7 @@ export default function AdminSettingsPage() {
           Global Settings
         </CardTitle>
         <CardDescription>
-          Manage site-wide settings, features, and content from one place.
+          Manage site-wide settings and features from one place.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -376,14 +301,6 @@ export default function AdminSettingsPage() {
                 <p className="text-sm text-muted-foreground">When enabled, only admins can access the site. All other users will see a maintenance page.</p>
               </div>
 
-              <div className="space-y-4 rounded-lg border p-4">
-                <Label className="text-base flex items-center gap-2 font-bold text-white"><Eye/> Simulated Activity Feed</Label>
-                <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">Show a fake real-time feed of user deposits and withdrawals.</p>
-                    <Switch checked={settings.simulatedActivityFeed} onCheckedChange={(v) => handleSettingChange("simulatedActivityFeed", v)}/>
-                </div>
-              </div>
-              
               <div className="space-y-4 rounded-lg border p-4">
                 <Label className="text-base flex items-center gap-2 font-bold text-white"><Wrench/> Withdrawal Settings</Label>
                 <div className="flex items-center justify-between">
@@ -522,19 +439,6 @@ export default function AdminSettingsPage() {
 
           <TabsContent value="appearance" className="mt-6">
             <div className="space-y-8">
-               <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><Copyright /> Footer Settings</Label>
-                  <div className="space-y-4 pt-4 border-t">
-                      <div className="space-y-2">
-                          <Label htmlFor="footer-email">Contact Email</Label>
-                          <Input id="footer-email" type="email" value={footerSettings.contact} onChange={(e) => setFooterSettings(s => ({...s, contact: e.target.value}))} />
-                      </div>
-                      <div className="space-y-2">
-                          <Label htmlFor="footer-copyright">Copyright Text</Label>
-                          <Textarea id="footer-copyright" value={footerSettings.copyright} onChange={(e) => setFooterSettings(s => ({...s, copyright: e.target.value}))} />
-                      </div>
-                  </div>
-              </div>
               <div className="space-y-4 rounded-lg border p-4">
                   <Label className="text-base flex items-center gap-2 font-bold text-white"><Tag/> Plan Tags</Label>
                   <p className="text-sm text-muted-foreground">Create custom tags to display on investment plans.</p>
@@ -561,84 +465,6 @@ export default function AdminSettingsPage() {
                        <Button variant="outline" onClick={addTag}><PlusCircle className="mr-2"/> Add Tag</Button>
                   </div>
               </div>
-              <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><Contact/> Page Categories</Label>
-                  <p className="text-sm text-muted-foreground">Manage categories for organizing footer and policy pages.</p>
-                   <div className="space-y-3 pt-4 border-t">
-                      {settings.pageCategories.map((cat) => (
-                          <div key={cat.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center p-3 rounded-md bg-muted/30">
-                              <div className="space-y-2">
-                                  <Label htmlFor={`cat-name-${cat.id}`}>Category Name</Label>
-                                  <Input id={`cat-name-${cat.id}`} value={cat.name} onChange={(e) => handleCategoryChange(cat.id, e.target.value)} />
-                              </div>
-                              <div className="flex justify-end">
-                                  <Button variant="destructive" size="icon" onClick={() => removeCategory(cat.id)}><Trash2/></Button>
-                              </div>
-                          </div>
-                      ))}
-                       <Button variant="outline" onClick={addCategory}><PlusCircle className="mr-2"/> Add Category</Button>
-                  </div>
-              </div>
-
-               <div className="space-y-4 rounded-lg border p-4">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer & Policy Pages</Label>
-                     <Button asChild>
-                        <Link href="/admin/pages/new"><FilePlus className="mr-2" /> Add New Page</Link>
-                    </Button>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Create and manage static pages like "About Us" or "Privacy Policy".</p>
-                  <div className="pt-4 border-t">
-                     {pages.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">No pages created yet.</p>
-                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Title</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Footer</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {pages.map(page => (
-                                    <TableRow key={page.id}>
-                                        <TableCell className="font-medium">{page.title}</TableCell>
-                                        <TableCell><Badge variant="secondary">{page.category}</Badge></TableCell>
-                                        <TableCell><Badge variant={page.isActive ? 'default' : 'destructive'}>{page.isActive ? 'Active' : 'Draft'}</Badge></TableCell>
-                                        <TableCell>{page.inFooter ? 'Yes' : 'No'}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button asChild variant="ghost" size="icon">
-                                                <Link href={`/admin/pages/edit/${page.id}`}><Edit className="h-4 w-4" /></Link>
-                                            </Button>
-                                             <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Delete Page?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            Are you sure you want to delete the page "{page.title}"? This cannot be undone.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={() => handleDeletePage(page.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                     )}
-                  </div>
-              </div>
-
             </div>
           </TabsContent>
         </Tabs>

@@ -2,23 +2,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "websitePages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "isActive", "order": "ASCENDING" },
-        { "fieldPath": "inFooter", "order": "ASCENDING" },
-        { "fieldPath": "order", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "websitePages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "slug", "order": "ASCENDING" },
-        { "fieldPath": "isActive", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "categories",
       "queryScope": "COLLECTION",
       "fields": [
