@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirebase } from "@/lib/firebase/provider";
-import { doc, getDoc, updateDoc, serverTimestamp, collection, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LoaderCircle, Save, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { revalidatePath } from "next/cache";
+import { updatePageAction } from "./../actions";
 
 const pageSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters."),
@@ -35,19 +34,6 @@ interface PageCategory {
   id: string;
   name: string;
 }
-
-async function updatePageAction(id: string, data: PageFormData) {
-    'use server';
-    const { db } = getFirebase();
-    const pageDocRef = doc(db, "websitePages", id);
-    await updateDoc(pageDocRef, {
-        ...data,
-        updatedAt: serverTimestamp(),
-    });
-    revalidatePath('/');
-    revalidatePath(`/${data.slug}`);
-}
-
 
 export default function EditPage() {
     const { id } = useParams();
