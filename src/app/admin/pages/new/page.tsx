@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LoaderCircle, Save, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { revalidatePath } from "next/cache";
 
 const pageSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters."),
@@ -33,6 +34,18 @@ type PageFormData = z.infer<typeof pageSchema>;
 interface PageCategory {
   id: string;
   name: string;
+}
+
+async function createPageAction(data: PageFormData) {
+    'use server';
+    const { db } = getFirebase();
+    await addDoc(collection(db, "websitePages"), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    });
+    revalidatePath('/');
+    revalidatePath(`/${data.slug}`);
 }
 
 export default function NewPage() {
@@ -59,7 +72,6 @@ export default function NewPage() {
     useEffect(() => {
         if (!db) return;
         
-        // Fetch categories
         const settingsDocRef = doc(db, "system", "settings");
         const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
             if(doc.exists()) {
@@ -85,14 +97,9 @@ export default function NewPage() {
     };
 
     const onSubmit = async (data: PageFormData) => {
-        if (!db) return;
         setIsSubmitting(true);
         try {
-            await addDoc(collection(db, "websitePages"), {
-                ...data,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-            });
+            await createPageAction(data);
             toast({ title: "Page Created", description: `"${data.title}" has been successfully created.` });
             router.push("/admin/settings");
         } catch (error: any) {

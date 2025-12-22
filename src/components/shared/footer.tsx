@@ -43,13 +43,13 @@ async function getFooterData() {
         ]);
 
         const settings = settingsDoc.exists() ? settingsDoc.data() as FooterSettings : defaultFooterSettings;
-        const pageCategories = systemSettingsDoc.exists() ? systemSettingsDoc.data().pageCategories || [] : [];
-        const pages = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WebPage));
+        const pageCategories: PageCategory[] = systemSettingsDoc.exists() ? systemSettingsDoc.data().pageCategories || [] : [];
+        const pages: WebPage[] = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WebPage));
 
-        const groupedPages = pageCategories.map((category: PageCategory) => ({
+        const groupedPages = pageCategories.map((category) => ({
             ...category,
             pages: pages.filter(page => page.category === category.name)
-        })).filter((category: any) => category.pages.length > 0);
+        })).filter((category) => category.pages.length > 0);
 
         return { settings, groupedPages };
     } catch (error) {
@@ -66,7 +66,6 @@ export async function Footer() {
     <footer className="border-t border-border/20 bg-background text-foreground">
         <div className="container mx-auto px-6 py-12">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                {/* Column 1: Logo and Tagline */}
                 <div className="flex flex-col items-center text-center md:items-start md:text-left space-y-4 lg:col-span-1">
                     <div className="flex items-center gap-3">
                         <Logo />
@@ -79,12 +78,11 @@ export async function Footer() {
                     </p>
                 </div>
                 
-                {/* Dynamically generated columns */}
-                {groupedPages.map((category: any) => (
+                {groupedPages.map((category) => (
                     <div key={category.id} className="flex flex-col items-center md:items-start">
                         <h4 className="font-bold text-white mb-4">{category.name}</h4>
                         <ul className="space-y-2 text-center md:text-left">
-                           {category.pages.map((page: WebPage) => (
+                           {category.pages.map((page) => (
                                <li key={page.slug}>
                                    <Link href={`/${page.slug}`} className="text-sm text-muted-foreground hover:text-primary transition-colors">
                                        {page.title}
@@ -95,8 +93,6 @@ export async function Footer() {
                     </div>
                 ))}
 
-
-                {/* Column for Contact Info */}
                 <div className="flex flex-col items-center md:items-start">
                      <h4 className="font-bold text-white mb-4">Contact Us</h4>
                     <a href={`mailto:${settings.contact}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -106,7 +102,6 @@ export async function Footer() {
                 </div>
             </div>
             
-            {/* Bottom Copyright Section */}
             <div className="mt-12 pt-8 border-t border-border/20 text-center">
                 <p className="text-sm text-muted-foreground">
                     {settings.copyright}

@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LoaderCircle, Save, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { revalidatePath } from "next/cache";
 
 const pageSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters."),
@@ -34,6 +35,19 @@ interface PageCategory {
   id: string;
   name: string;
 }
+
+async function updatePageAction(id: string, data: PageFormData) {
+    'use server';
+    const { db } = getFirebase();
+    const pageDocRef = doc(db, "websitePages", id);
+    await updateDoc(pageDocRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+    });
+    revalidatePath('/');
+    revalidatePath(`/${data.slug}`);
+}
+
 
 export default function EditPage() {
     const { id } = useParams();
@@ -59,15 +73,13 @@ export default function EditPage() {
     });
 
     useEffect(() => {
-        if (!db) return;
+        if (!db || !id) return;
         
-        // Fetch categories
         const settingsDocRef = doc(db, "system", "settings");
         const unsubscribeCategories = onSnapshot(settingsDocRef, (doc) => {
             if(doc.exists()) setPageCategories(doc.data().pageCategories || []);
         });
 
-        // Fetch page data
         const pageDocRef = doc(db, "websitePages", id as string);
         getDoc(pageDocRef).then((docSnap) => {
             if (docSnap.exists()) {
@@ -93,14 +105,10 @@ export default function EditPage() {
     };
 
     const onSubmit = async (data: PageFormData) => {
-        if (!db) return;
+        if (!id) return;
         setIsSubmitting(true);
         try {
-            const pageDocRef = doc(db, "websitePages", id as string);
-            await updateDoc(pageDocRef, {
-                ...data,
-                updatedAt: serverTimestamp(),
-            });
+            await updatePageAction(id as string, data);
             toast({ title: "Page Updated", description: `"${data.title}" has been saved.` });
             router.push("/admin/settings");
         } catch (error: any) {
