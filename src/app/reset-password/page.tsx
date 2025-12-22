@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { LoaderCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { Logo } from '@/components/shared/logo';
 
 const passwordSchema = z.object({
     newPassword: z.string().min(6, "Password must be at least 6 characters"),
@@ -49,7 +50,7 @@ function ResetPasswordComponent() {
         if (codeParam) {
             setActionCode(codeParam);
         } else {
-            setError("Invalid or incomplete link. Please request a new one.");
+            setError("Invalid or incomplete password reset link. Please request a new one from the login page.");
             setLoading(false);
         }
     }, [searchParams]);
@@ -95,6 +96,9 @@ function ResetPasswordComponent() {
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Error</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
+                     <Button asChild className="mt-4 w-full">
+                        <Link href="/login">Back to Login</Link>
+                    </Button>
                 </Alert>
             );
         }
@@ -103,7 +107,7 @@ function ResetPasswordComponent() {
                 <div className="text-center">
                     <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
                     <p className="text-foreground">{success}</p>
-                    <Button asChild className="mt-4">
+                    <Button asChild className="mt-4 w-full">
                         <Link href="/login">Go to Login</Link>
                     </Button>
                 </div>
@@ -139,11 +143,18 @@ function ResetPasswordComponent() {
         <div className="flex min-h-screen items-center justify-center p-4 bg-background">
             <Card className="w-full max-w-md border-border/20 shadow-lg shadow-primary/5">
                 <CardHeader>
+                     <Link href="/" className="flex items-center gap-3 mb-4 justify-center">
+                        <Logo className="h-8 w-8" />
+                        <h1 className="text-3xl font-bold text-foreground font-headline tracking-tighter">
+                        TradeVission
+                        </h1>
+                    </Link>
                     <CardTitle className="text-2xl text-center text-white">
                         Reset Your Password
                     </CardTitle>
                     <CardDescription className="text-center">
                         {isValidCode && !success && "Enter your new password below."}
+                         {!isValidCode && !loading && !error && "Verifying your link..."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

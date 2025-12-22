@@ -4,23 +4,39 @@ This is a NextJS starter in Firebase Studio.
 
 To get started, take a look at src/app/page.tsx.
 
-## Important: Configure Password Reset Email
+## Important: Configure Password Reset Email (MANDATORY FIX)
 
-To make the "Forgot Password" feature work correctly, you need to configure the email template in your Firebase project. This is a **MANDATORY ONE-TIME SETUP**.
+To make the "Forgot Password" feature work correctly, you **MUST** configure the email template in your Firebase project. This is a one-time setup. Without this, the password reset link will NOT work.
 
-1.  Go to the **Firebase Console** for your project.
-2.  In the left menu, go to **Build** > **Authentication**.
-3.  Click on the **Templates** tab at the top.
-4.  In the list, find the **Password Reset** template and click the pencil icon to edit it.
-5.  Near the bottom, click the **"Customize action URL"** link.
-6.  A dialog box will appear. Paste the following URL into the text box.
+### Step 1: Open Firebase Console
 
-    **IMPORTANT:** You MUST replace `tradevision-82417` with your actual Firebase Project ID if it's different. You can find your project ID in the Firebase Console project settings (click the gear icon ⚙️ next to "Project Overview"). The final domain should be `your-project-id.web.app`, NOT `tradevission.online`. The `.web.app` domain is the default hosting domain that Firebase uses for these links.
+Go to the **Firebase Console** for your project: [https://console.firebase.google.com/](https://console.firebase.google.com/)
+
+### Step 2: Go to Authentication Templates
+
+1.  In the left menu, go to **Build** > **Authentication**.
+2.  Click on the **Templates** tab at the top.
+3.  In the list of email templates, find **Password Reset** and click the pencil icon ✏️ to edit it.
+
+
+
+### Step 3: Customize Action URL
+
+1.  Near the bottom of the template editor, click the link that says **"Customize action URL"**.
+2.  A dialog box will appear. **DELETE** any existing URL and paste the following URL into the text box.
 
     ```
     https://tradevision-82417.web.app/reset-password
     ```
 
-7.  Click **Save**.
+    **VERY IMPORTANT:**
+    *   The domain **MUST** be your project's default domain (`<your-project-id>.web.app`), **NOT** your custom domain (`tradevission.online`). Firebase generates authentication links using this default domain.
+    *   Ensure your Project ID (`tradevision-82417`) in the URL is correct. You can find your Project ID in your project's settings (click the gear icon ⚙️ next to "Project Overview").
 
-After this change, the password reset links sent to your users will correctly point to your application's password reset page. Without this step, the links will not work.
+
+
+### Step 4: Save the Template
+
+Click the **Save** button at the bottom of the page.
+
+After performing these steps, the password reset links sent to your users will correctly point to your application's password reset page.
