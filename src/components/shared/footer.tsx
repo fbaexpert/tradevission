@@ -4,10 +4,9 @@
 import Link from "next/link";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { useFirebase } from "@/lib/firebase/provider";
-import { collection, doc, onSnapshot, query, where, orderBy, getDocs } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, orderBy } from "firebase/firestore";
 import { useEffect, useState, useMemo } from "react";
-import { unstable_noStore as noStore } from 'next/cache';
+import { useFirebase } from "@/lib/firebase/provider";
 
 interface FooterSettings {
   supportEmail: string;
@@ -20,44 +19,8 @@ interface PageLink {
     category: string;
 }
 
-const getFooterData = async () => {
-    noStore();
-    const { db } = getFirebase();
-    
-    let settings: FooterSettings = {
-        supportEmail: "support@tradevission.online",
-        copyrightText: "© 2024 TradeVission. All Rights Reserved."
-    };
-    let pages: PageLink[] = [];
-
-    try {
-        const settingsDocRef = doc(db, "system", "settings");
-        const settingsDoc = await getDoc(settingsDocRef);
-        if (settingsDoc.exists()) {
-            const data = settingsDoc.data();
-            if (data.footer) {
-                settings = data.footer;
-            }
-        }
-
-        const pagesQuery = query(
-            collection(db, "websitePages"), 
-            where("inFooter", "==", true), 
-            where("isActive", "==", true),
-            orderBy("order", "asc")
-        );
-        const pagesSnapshot = await getDocs(pagesQuery);
-        pages = pagesSnapshot.docs.map(doc => doc.data() as PageLink);
-        
-    } catch (error) {
-        console.error("Failed to fetch footer data:", error);
-    }
-    
-    return { settings, pages };
-};
-
-
 export function Footer() {
+  const { db } = useFirebase();
   const [footerSettings, setFooterSettings] = useState<FooterSettings>({
     supportEmail: "tradevissionn@gmail.com",
     copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
@@ -65,7 +28,8 @@ export function Footer() {
   const [pages, setPages] = useState<PageLink[]>([]);
 
   useEffect(() => {
-    const { db } = getFirebase();
+    if (!db) return;
+    
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
       if (doc.exists() && doc.data().footer) {
@@ -85,7 +49,7 @@ export function Footer() {
         unsubscribeSettings();
         unsubscribePages();
     };
-  }, []);
+  }, [db]);
 
   const groupedPages = useMemo(() => {
     return pages.reduce((acc, page) => {
