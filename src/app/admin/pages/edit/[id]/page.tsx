@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LoaderCircle, Save, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { updatePageAction } from "./../actions";
+import { updatePageAction } from "../../actions";
 
 const pageSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters."),
