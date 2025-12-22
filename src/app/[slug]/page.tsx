@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { getFirebase } from '@/lib/firebase/config';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { LoaderCircle, FileText } from 'lucide-react';
+import { LoaderCircle, FileText, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
 
 interface PageContent {
     title: string;
@@ -16,6 +17,7 @@ interface PageContent {
 
 export default function DynamicPage() {
     const params = useParams();
+    const router = useRouter();
     const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
     const { db } = getFirebase();
     
@@ -29,27 +31,7 @@ export default function DynamicPage() {
             setError("Page not found.");
             return;
         }
-
-        const fetchPage = async () => {
-            setLoading(true);
-            try {
-                const pageRef = doc(db, "websitePages", slug);
-                const docSnap = await getDoc(pageRef);
-
-                if (docSnap.exists()) {
-                    setPageContent(docSnap.data() as PageContent);
-                } else {
-                    setError("The page you are looking for does not exist.");
-                }
-            } catch (err) {
-                console.error(err);
-                setError("An error occurred while fetching the page.");
-            } finally {
-                setLoading(false);
-            }
-        };
         
-        // A temporary workaround for a Firestore query issue in this context
         const fetchWithQuery = async () => {
              setLoading(true);
              try {
@@ -85,7 +67,11 @@ export default function DynamicPage() {
     return (
         <div className="p-4 sm:p-6 md:p-8 bg-background">
             <div className="container mx-auto max-w-4xl">
-                <Card className="border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20">
+                <Card className="border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20 relative">
+                     <Button variant="ghost" size="icon" className="absolute top-4 right-4 z-10" onClick={() => router.back()}>
+                        <X className="h-5 w-5" />
+                        <span className="sr-only">Close</span>
+                    </Button>
                      {error ? (
                         <CardHeader className="text-center py-20">
                            <CardTitle className="text-2xl text-destructive">Page Not Found</CardTitle>
