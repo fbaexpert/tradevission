@@ -1,12 +1,10 @@
 
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { useEffect, useState } from "react";
-import { redirect, useSearchParams } from "next/navigation";
+import { redirect } from "next/navigation";
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
   <div className="relative overflow-hidden rounded-xl border border-border/30 bg-gradient-to-br from-card to-muted/20 p-6 shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1 group">
@@ -25,12 +23,15 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
 
 
 // This is a Client Component that handles client-side logic like referrals.
-function LandingPageClientLogic() {
-  const searchParams = useSearchParams();
+function LandingPageClient() {
+  'use client';
+
   const [loginHref, setLoginHref] = useState("/login");
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
     const refId = searchParams.get('ref');
+
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
         setLoginHref(`/login?ref=${refId}`);
@@ -40,7 +41,7 @@ function LandingPageClientLogic() {
             setLoginHref(`/login?ref=${storedRefId}`);
         }
     }
-  }, [searchParams]);
+  }, []);
 
   return (
       <div className="bg-background text-foreground flex flex-col">
@@ -140,19 +141,17 @@ function LandingPageClientLogic() {
 
 
 // This is a Server Component wrapper. It handles server-side logic like redirects.
-export default function LandingPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
+export default function LandingPage({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
   
   // --- SERVER-SIDE REDIRECT ---
-  const mode = searchParams?.['mode'];
-  const oobCode = searchParams?.['oobCode'];
+  const mode = searchParams?.mode;
+  const oobCode = searchParams?.oobCode;
   
   if (mode === 'resetPassword' && oobCode) {
-    const params = new URLSearchParams();
-    params.set('mode', mode);
-    params.set('oobCode', Array.isArray(oobCode) ? oobCode[0] : oobCode);
+    const params = new URLSearchParams(searchParams as any);
     redirect(`/reset-password?${params.toString()}`);
   }
 
   // If no redirect is needed, render the client component with the landing page UI.
-  return <LandingPageClientLogic />;
+  return <LandingPageClient />;
 }
