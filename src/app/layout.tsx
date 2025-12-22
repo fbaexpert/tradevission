@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/auth-context';
 import { Toaster } from '@/components/ui/toaster';
 import { FirebaseProvider } from '@/lib/firebase/provider';
 import { Inter } from 'next/font/google';
+import { Footer } from '@/components/shared/footer';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -29,7 +30,10 @@ export default function RootLayout({
       <body className="font-body antialiased">
         <FirebaseProvider>
           <AuthProvider>
-            {children}
+            <div className="flex flex-col min-h-screen">
+              <main className="flex-grow">{children}</main>
+              <Footer />
+            </div>
             <Toaster />
           </AuthProvider>
         </FirebaseProvider>

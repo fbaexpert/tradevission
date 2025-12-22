@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus, FileText } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
-import { Footer } from "@/components/shared/footer";
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFirebase } from "@/lib/firebase/provider";
@@ -92,7 +91,7 @@ export default function LandingPage() {
   }, [pages, categories]);
 
   return (
-    <div className="bg-background text-foreground min-h-screen flex flex-col">
+    <div className="bg-background text-foreground flex flex-col">
       {/* Header */}
       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
         <div className="flex items-center gap-3">
@@ -213,9 +212,6 @@ export default function LandingPage() {
         )}
 
       </main>
-
-      {/* Footer */}
-      <Footer />
     </div>
   );
 }

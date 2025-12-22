@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./logo";
 import { Mail } from "lucide-react";
-import { collection, query, orderBy, where, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { getFirebase } from "@/lib/firebase/config";
 
 interface DynamicPage {
@@ -31,6 +31,7 @@ const defaultFooterSettings: FooterSettings = {
 
 async function getFooterData() {
   try {
+    // This function will run on the server, so we can directly access Firebase.
     const { db } = getFirebase();
 
     const pagesQuery = query(collection(db, "pages"), where("isActive", "==", true), orderBy("order", "asc"));
@@ -58,14 +59,11 @@ async function getFooterData() {
 
     return { groupedPages, footerSettings };
   } catch (error) {
-    console.error("Failed to fetch footer data:", error);
+    console.error("Failed to fetch footer data on server:", error);
     // Return empty data on error to prevent site crash
     return { groupedPages: [], footerSettings: defaultFooterSettings };
   }
 }
-
-// Re-importing doc and getDoc for server-side usage
-import { doc, getDoc } from "firebase/firestore";
 
 export async function Footer() {
   const { groupedPages, footerSettings } = await getFooterData();
