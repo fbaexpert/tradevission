@@ -156,6 +156,7 @@ export const verifyWithdrawalOtp = functions.runWith({ enforceAppCheck: true }).
  * A callable function that allows an admin to change a user's password.
  */
 export const changeUserPassword = functions.https.onCall(async (data, context) => {
+    // Check if the request is made by an authenticated admin user.
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can change user passwords.');
     }
@@ -175,7 +176,7 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
         return { success: true, message: 'Password updated successfully.' };
     } catch (error: any) {
         functions.logger.error(`Error changing password for user ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', 'Failed to update password.');
+        throw new functions.https.HttpsError('internal', 'Failed to update password. Please check server logs.');
     }
 });
 
@@ -281,7 +282,10 @@ export const deleteUserAccount = functions.runWith({
  * A callable function to perform a "hard reset" on a user account.
  * This wipes most of their progress data but does not delete their auth record.
  */
-export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '512MB'}).https.onCall(async (data, context) => {
+export const hardResetUser = functions.runWith({
+    timeoutSeconds: 300,
+    memory: '512MB'
+}).https.onCall(async (data, context) => {
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can reset user accounts.');
     }
@@ -290,67 +294,76 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
     if (!uid) {
         throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
     }
-
+    
+    functions.logger.log(`Admin-initiated HARD RESET for user: ${uid}`);
     const db = admin.firestore();
-    const mainBatch = db.batch();
-
-    // 1. Reset main user document fields
-    const userRef = db.collection('users').doc(uid);
-    mainBatch.update(userRef, {
-        balance0: 0,
-        totalDeposit: 0,
-        totalWithdrawn: 0,
-        totalReferralBonus: 0,
-        totalTeamBonus: 0,
-        totalTeamDeposit: 0,
-        depositDone: false,
-        isCommander: false,
-        teamBonusPaused: false,
-        awardedSuperBonuses: [],
-        customBadges: [],
-        lastSpinTimestamp: null,
-        lastWeeklyRewardPaidAt: null,
-        withdrawalVerification: {
-            required: false,
-            status: 'not_verified',
-            attempts: 0,
-            cooldownUntil: null,
-            otp: null,
-            otpExpiry: null
-        }
-    });
-
-    // 2. Reset CPM coins document
-    const cpmCoinRef = db.collection('cpm_coins').doc(uid);
-    mainBatch.update(cpmCoinRef, { amount: 0 });
-
-    // Collections to delete documents from
-    const collectionsToDelete = [
-        { name: 'userPlans', field: 'userId' },
-        { name: 'deposits', field: 'uid' }, // Note: 'uid' field
-        { name: 'withdrawals', field: 'userId' },
-        { name: 'cpmWithdrawals', field: 'userId' },
-        { name: 'supportTickets', field: 'userId' },
-        { name: 'feedback', field: 'userId' },
-        { name: 'kycSubmissions', field: 'userId' },
-        { name: 'cpm_purchase_logs', field: 'userId' },
-        { name: 'activityLogs', field: 'userId' },
-    ];
 
     try {
-        // 3. Delete documents from top-level collections
-        for (const { name, field } of collectionsToDelete) {
+        // --- Step 1: Reset main user document fields ---
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+        if(!userDoc.exists) {
+            throw new functions.https.HttpsError('not-found', 'User to reset was not found in Firestore.');
+        }
+
+        const mainBatch = db.batch();
+        mainBatch.update(userRef, {
+            balance0: 0,
+            totalDeposit: 0,
+            totalWithdrawn: 0,
+            totalReferralBonus: 0,
+            totalTeamBonus: 0,
+            totalTeamDeposit: 0,
+            totalTeamMembers: 0,
+            depositDone: false,
+            isCommander: false,
+            teamBonusPaused: false,
+            awardedSuperBonuses: [],
+            customBadges: [],
+            lastSpinTimestamp: null,
+            lastWeeklyRewardPaidAt: null,
+            withdrawalVerification: {
+                required: false,
+                status: 'not_verified',
+                attempts: 0,
+                cooldownUntil: null,
+                otp: null,
+                otpExpiry: null
+            }
+        });
+
+        // --- Step 2: Reset/Delete other root documents ---
+        const cpmCoinRef = db.collection('cpm_coins').doc(uid);
+        mainBatch.delete(cpmCoinRef);
+        
+        await mainBatch.commit();
+        functions.logger.log(`Main user data and CPM coins reset for user ${uid}`);
+
+
+        // --- Step 3: Delete documents from various collections ---
+        const collectionsToClean = [
+            { name: 'userPlans', field: 'userId' },
+            { name: 'deposits', field: 'uid' },
+            { name: 'withdrawals', field: 'userId' },
+            { name: 'cpmWithdrawals', field: 'userId' },
+            { name: 'supportTickets', field: 'userId' },
+            { name: 'feedback', field: 'userId' },
+            { name: 'kycSubmissions', field: 'userId' },
+            { name: 'cpm_purchase_logs', field: 'userId' },
+            { name: 'activityLogs', field: 'userId' },
+        ];
+
+        for (const { name, field } of collectionsToClean) {
             const snapshot = await db.collection(name).where(field, '==', uid).get();
             if (!snapshot.empty) {
-                snapshot.forEach(doc => mainBatch.delete(doc.ref));
+                const deleteBatch = db.batch();
+                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                await deleteBatch.commit();
+                functions.logger.log(`Deleted documents from '${name}' for user ${uid}`);
             }
         }
         
-        // 4. Commit main batch changes
-        await mainBatch.commit();
-        functions.logger.log(`Main data reset for user ${uid}`);
-
-        // 5. Delete subcollections (requires separate operations)
+        // --- Step 4: Delete all sub-collections under the user ---
         const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
         for (const sub of subcollections) {
             const subcollectionRef = userRef.collection(sub);
@@ -359,12 +372,13 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
                 const deleteBatch = db.batch();
                 snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
                 await deleteBatch.commit();
+                functions.logger.log(`Deleted subcollection '${sub}' for user ${uid}`);
             }
         }
         
-        functions.logger.log(`Subcollections deleted for user ${uid}`);
-
+        functions.logger.log(`Successfully completed hard reset for user ${uid}`);
         return { success: true, message: `User ${uid} has been successfully reset.` };
+        
     } catch (error: any) {
         functions.logger.error(`Error during hard reset for user ${uid}:`, error);
         throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
