@@ -190,7 +190,7 @@ export default function FlipWinPage() {
         const userBalance = paymentMethod === 'usd' ? balance.balance : balance.cpmCoin;
 
         if (userBalance < cost) {
-            setError(`Insufficient ${paymentMethod === 'usd' ? 'Points' : 'CPM Coins'}.`);
+            setError(`Insufficient ${paymentMethod === 'usd' ? 'balance' : 'CPM Coins'}.`);
             setPlaying(false);
             return;
         }
@@ -200,13 +200,12 @@ export default function FlipWinPage() {
                 const userRef = doc(db, "users", user.uid);
                 const userCoinRef = doc(db, "cpm_coins", user.uid);
                 
-                // Get current balances inside transaction for consistency
                 const userDoc = await transaction.get(userRef);
                 const userCoinDoc = await transaction.get(userCoinRef);
+                
                 const currentBalance = userDoc.data()?.balance0 || 0;
                 const currentCpmCoins = userCoinDoc.exists() ? userCoinDoc.data().amount : 0;
                 
-                // Determine cost and winning reward
                 const rewards = settings.rewards;
                 const totalProbability = rewards.reduce((acc, reward) => acc + (reward.probability || 0), 0);
                 let randomPoint = Math.random() * totalProbability;
@@ -221,21 +220,20 @@ export default function FlipWinPage() {
                 }
                 if (!winningReward) winningReward = rewards[rewards.length - 1];
 
-                // Apply cost and reward
                 if (paymentMethod === 'usd') {
-                    if (currentBalance < cost) throw new Error("Insufficient Points.");
+                    if (currentBalance < cost) throw new Error("Insufficient balance.");
                     let newBalance = currentBalance - cost;
                     if (winningReward.type === "CASH") newBalance += winningReward.value;
                     transaction.update(userRef, { balance0: newBalance });
                     
                     if (winningReward.type === "CPM_COIN") {
-                        transaction.set(userCoinRef, { amount: currentCpmCoins + winningReward.value }, { merge: true });
+                        transaction.set(userCoinRef, { amount: currentCpmCoins + winningReward.value, userId: user.uid }, { merge: true });
                     }
                 } else { // Paying with CPM
                     if (currentCpmCoins < cost) throw new Error("Insufficient CPM Coins.");
                     let newCpmBalance = currentCpmCoins - cost;
                     if (winningReward.type === "CPM_COIN") newCpmBalance += winningReward.value;
-                    transaction.set(userCoinRef, { amount: newCpmBalance }, { merge: true });
+                    transaction.set(userCoinRef, { amount: newCpmBalance, userId: user.uid }, { merge: true });
                     
                     if (winningReward.type === "CASH") {
                         transaction.update(userRef, { balance0: currentBalance + winningReward.value });
@@ -350,7 +348,7 @@ export default function FlipWinPage() {
                             <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'usd' | 'cpm')} className="grid grid-cols-2 gap-4 w-full">
                                 <Label className="flex items-center justify-center gap-2 p-3 border rounded-md has-[:checked]:bg-primary/20 has-[:checked]:border-primary transition-colors cursor-pointer">
                                     <RadioGroupItem value="usd" id="usd" />
-                                    <DollarSign/> Use Points
+                                    <DollarSign/> Use balance
                                 </Label>
                                 <Label className="flex items-center justify-center gap-2 p-3 border rounded-md has-[:checked]:bg-primary/20 has-[:checked]:border-primary transition-colors cursor-pointer">
                                     <RadioGroupItem value="cpm" id="cpm" />
