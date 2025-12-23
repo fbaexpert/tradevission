@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -76,32 +77,6 @@ interface SuperBonusTier {
   referrals: number;
   bonus: number;
 }
-interface CpmCoinPackage {
-  id: string;
-  name: string;
-  coinAmount: number;
-  price: number;
-  originalPrice?: number;
-  tagline?: string;
-  includeVipCode?: boolean;
-}
-interface CpmPresaleSettings {
-  packages: CpmCoinPackage[];
-}
-interface SpinReward {
-    id: string;
-    label: string;
-    value: number;
-    type: "CASH" | "TRY_AGAIN";
-    probability: number;
-}
-interface FlipReward {
-    id: string;
-    label: string;
-    value: number;
-    type: "CASH" | "CPM_COIN" | "NO_REWARD";
-    probability: number;
-}
 interface PlanTag {
   id: string;
   name: string;
@@ -130,13 +105,7 @@ interface AdminSettings {
   depositBoost: DepositBoost;
   commander: CommanderSettings;
   superBonusTiers: SuperBonusTier[];
-  spinWinRewards: SpinReward[];
-  flipWinSettings: {
-    cost: { usd: number, cpm: number },
-    rewards: FlipReward[]
-  };
   planTags: PlanTag[];
-  cpmPresale: CpmPresaleSettings;
   footer: FooterSettings;
   featureEligibility: FeatureEligibility;
 }
@@ -164,13 +133,7 @@ const defaultSettings: AdminSettings = {
     referralRequirement: 5,
   },
   superBonusTiers: [],
-  spinWinRewards: [],
-  flipWinSettings: {
-    cost: { usd: 2, cpm: 20 },
-    rewards: [],
-  },
   planTags: [],
-  cpmPresale: { packages: [] },
   footer: {
     supportEmail: "tradevissionn@gmail.com",
     copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
@@ -209,6 +172,10 @@ export default function AdminSettingsPage() {
         };
         // @ts-ignore
         delete mergedSettings.cpmAirdropRestriction; // clean up old key
+        // @ts-ignore
+        delete mergedSettings.spinWinRewards;
+        // @ts-ignore
+        delete mergedSettings.flipWinSettings;
         setSettings(mergedSettings);
       } else {
         setDoc(settingsDocRef, defaultSettings);
@@ -427,7 +394,7 @@ export default function AdminSettingsPage() {
                         <Label className="text-base flex items-center gap-2 font-bold text-white"><ShieldCheck/> Feature Eligibility</Label>
                         <Switch checked={settings.featureEligibility.enabled} onCheckedChange={(v) => handleFeatureEligibilityChange("enabled", v)}/>
                     </div>
-                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to use features like Spin &amp; Win, Airdrops, or CPM Coin purchases.</p>
+                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to use features like Spin &amp; Win, Flip &amp; Win, Airdrops, or CPM Coin purchases.</p>
                      {settings.featureEligibility.enabled && (
                         <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
                             <div className="space-y-2">

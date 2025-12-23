@@ -70,6 +70,8 @@ const navItems = [
   { href: "/admin/withdrawals", icon: ArrowUpFromDot, label: "Withdrawals" },
   { href: "/admin/cpm-withdrawals", icon: Coins, label: "CPM Withdrawals" },
   { href: "/admin/vip-codes", icon: KeyRound, label: "VIP Codes" },
+  { href: "/admin/spin-win", icon: Star, label: "Spin & Win" },
+  { href: "/admin/flip-win", icon: FlipVertical, label: "Flip & Win" },
   { href: "/admin/support", icon: LifeBuoy, label: "Support Tickets" },
   { href: "/admin/maintenance-support", icon: Wrench, label: "Maintenance Support" },
   { href: "/admin/feedback", icon: Lightbulb, label: "Feedback" },
