@@ -193,10 +193,6 @@ export default function AdminUsersPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [newTransactionDate, setNewTransactionDate] = useState<Date | undefined>(new Date());
   
-  // Hard Reset State
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const [resetTypedConfirm, setResetTypedConfirm] = useState("");
-
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -343,12 +339,6 @@ export default function AdminUsersPage() {
     setNewTransactionDate(transaction.createdAt?.toDate() || new Date());
   };
   
-  const openHardResetDialog = (user: User) => {
-    setSelectedUser(user);
-    setResetTypedConfirm("");
-    setIsResetConfirmOpen(true);
-  }
-
   const openPasswordDialog = (user: User) => {
     setSelectedUser(user);
     setNewPassword("");
@@ -798,39 +788,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleHardReset = async () => {
-    if (!selectedUser || !functions) return;
-
-    if (resetTypedConfirm !== 'RESET') {
-        toast({
-            variant: "destructive",
-            title: "Confirmation Failed",
-            description: "You must type 'RESET' to confirm this action.",
-        });
-        return;
-    }
-
-    setIsSubmitting(true);
-    const hardResetUser = httpsCallable(functions, 'hardResetUser');
-
-    try {
-        const result: any = await hardResetUser({ uid: selectedUser.id });
-        toast({
-            title: "Hard Reset Successful",
-            description: result.data.message || `Data for ${selectedUser.email} has been reset.`,
-        });
-        setIsResetConfirmOpen(false);
-    } catch (error: any) {
-         toast({
-            variant: "destructive",
-            title: "Hard Reset Failed",
-            description: error.message || "An unexpected error occurred during the reset.",
-        });
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
   const handleDeleteUser = async (user: User) => {
     if (!functions) {
         toast({
@@ -1033,10 +990,6 @@ export default function AdminUsersPage() {
                                 </DropdownMenuSub>
                                 <DropdownMenuItem onClick={() => openTeamDialog(user)}>View Team</DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => openHardResetDialog(user)} className="text-yellow-400 focus:bg-yellow-400/10 focus:text-yellow-400">
-                                  <RefreshCw className="mr-2 h-4 w-4" />
-                                  Hard Reset User
-                                </DropdownMenuItem>
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
@@ -1565,35 +1518,6 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
       
-      <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Hard Reset User: {selectedUser?.name}</DialogTitle>
-            <DialogDescription>
-                This will wipe all progress for <span className="font-bold text-white">{selectedUser?.email}</span>, resetting balances, plans, and history. The user account itself will NOT be deleted. This is irreversible.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-              <Label htmlFor="hard-reset-confirm">Type "RESET" to confirm</Label>
-              <Input 
-                id="hard-reset-confirm"
-                value={resetTypedConfirm}
-                onChange={(e) => setResetTypedConfirm(e.target.value)}
-                placeholder="RESET"
-                className="font-mono tracking-widest"
-                disabled={isSubmitting}
-              />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsResetConfirmOpen(false)} disabled={isSubmitting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleHardReset} disabled={isSubmitting || resetTypedConfirm !== 'RESET'}>
-              {isSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Confirm Hard Reset
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent>
           <DialogHeader>
