@@ -147,7 +147,7 @@ export default function FlipWinPage() {
     
     const [paymentMethod, setPaymentMethod] = useState<'usd' | 'cpm'>('usd');
     const [flippedIndex, setFlippedIndex] = useState<number | null>(null);
-    const [rewards, setRewards] = useState<(FlipReward | null)[]>([null, null, null, null, null, null]);
+    const [rewards, setRewards] = useState<(FlipReward | null)[]>([null, null, null]);
     const [isRevealed, setIsRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [playing, setPlaying] = useState(false);
@@ -232,7 +232,7 @@ export default function FlipWinPage() {
             });
 
             if(result) {
-                const newRewards: (FlipReward | null)[] = [null, null, null, null, null, null];
+                const newRewards: (FlipReward | null)[] = [null, null, null];
                 newRewards[index] = result;
                 setRewards(newRewards);
                 setFlippedIndex(index);
@@ -257,7 +257,7 @@ export default function FlipWinPage() {
     
     const handleTryAgain = () => {
         setFlippedIndex(null);
-        setRewards([null, null, null, null, null, null]);
+        setRewards([null, null, null]);
         setIsRevealed(false);
         setError(null);
     }
@@ -303,7 +303,7 @@ export default function FlipWinPage() {
                     )}
                     
                     <div className="flex flex-wrap gap-4 sm:gap-6 justify-center">
-                       {[0, 1, 2, 3, 4, 5].map(i => (
+                       {[0, 1, 2].map(i => (
                            <PlayingCard 
                                 key={i}
                                 isFlipped={flippedIndex === i}
@@ -357,5 +357,3 @@ export default function FlipWinPage() {
         </div>
     );
 }
-
-    
