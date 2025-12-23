@@ -182,6 +182,7 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
 
 /**
  * A callable function that allows an admin to delete a user account and all associated data.
+ * This is robust and handles cases where the user might already be deleted from Auth.
  */
 export const deleteUserAccount = functions.runWith({timeoutSeconds: 60, memory: '256MB'}).https.onCall(async (data, context) => {
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
