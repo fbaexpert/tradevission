@@ -61,7 +61,7 @@ export default function AirdropPage() {
         const unsubscribeEvents = onSnapshot(q, (snapshot) => {
             const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AirdropEvent));
             setAirdropEvents(events);
-            if (!user) setLoading(false);
+            setLoading(false); // Fix: Set loading to false after events are fetched
         });
 
         const settingsDocRef = doc(db, "system", "settings");
