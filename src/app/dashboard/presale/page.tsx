@@ -22,7 +22,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
-import { getFirebase } from "@/lib/firebase/config";
+import { useFirebase } from "@/lib/firebase/provider";
 import {
   doc,
   getDoc,
@@ -256,7 +256,6 @@ export default function PreSalePage() {
     setLoading(true);
     setPurchasingPackageId(pkg.id);
     setError(null);
-    const { db } = getFirebase();
 
     try {
       const userDocRef = doc(db, "users", user.uid);
