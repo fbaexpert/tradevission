@@ -7,12 +7,13 @@ import { useFirebase } from "@/lib/firebase/provider";
 import { collection, doc, onSnapshot, query, runTransaction, serverTimestamp, Timestamp, writeBatch, orderBy, where, getDocs, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoaderCircle, Gift, PartyPopper, CheckCircle, AlertTriangle } from "lucide-react";
+import { LoaderCircle, Gift, PartyPopper, CheckCircle, AlertTriangle, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Loader from "@/components/shared/loader";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import Link from "next/link";
 
 
 interface AirdropEvent {
@@ -61,7 +62,7 @@ export default function AirdropPage() {
         const unsubscribeEvents = onSnapshot(q, (snapshot) => {
             const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AirdropEvent));
             setAirdropEvents(events);
-            setLoading(false); // Fix: Set loading to false after events are fetched
+            setLoading(false);
         });
 
         const settingsDocRef = doc(db, "system", "settings");
@@ -257,13 +258,26 @@ export default function AirdropPage() {
                 </Card>
 
                 {!isEligible && eligibilityError && (
-                    <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Not Eligible for Airdrops</AlertTitle>
-                        <AlertDescription>
-                           {eligibilityError}
-                        </AlertDescription>
-                    </Alert>
+                     <div className="relative p-6 rounded-lg border bg-gradient-to-br from-red-900/40 via-background to-background overflow-hidden">
+                        <div 
+                            className="absolute inset-0 opacity-10"
+                            style={{
+                                backgroundImage: `radial-gradient(circle at 10% 20%, hsl(var(--destructive)), transparent 70%), radial-gradient(circle at 90% 80%, hsl(var(--destructive)), transparent 70%)`
+                            }}
+                        />
+                        <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                            <div className="p-3 rounded-full bg-red-500/20 border border-red-500/30">
+                                <ShieldAlert className="h-10 w-10 text-red-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Not Eligible for Airdrops</h3>
+                                <p className="text-sm text-red-200/80 mt-1">{eligibilityError}</p>
+                                <Button asChild size="sm" variant="outline" className="mt-4 bg-transparent hover:bg-white/10 text-white">
+                                    <Link href="/dashboard/plans">View Plans</Link>
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 {airdropEvents.length === 0 ? (
