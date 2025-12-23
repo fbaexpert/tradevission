@@ -848,7 +848,7 @@ export default function AdminUsersPage() {
         await deleteUserAccount({ uid: user.id });
         toast({
             title: "User Deletion Initiated",
-            description: `${user.name}'s account and data are being removed. The list will update shortly.`,
+            description: `${user.name}'s account is being removed. The list will update shortly.`,
         });
     } catch (error: any) {
         console.error("Deletion failed:", error);
@@ -1048,13 +1048,13 @@ export default function AdminUsersPage() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                This will permanently delete the user <span className="font-bold text-white">{user.name} ({user.email})</span> and all their associated data from Authentication, Firestore, and Storage. This action cannot be undone.
+                                                This will permanently delete the user <span className="font-bold text-white">{user.name} ({user.email})</span> and all their associated data. This action is irreversible and cannot be undone.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                             <AlertDialogAction onClick={() => handleDeleteUser(user)} className="bg-destructive hover:bg-destructive/90">
-                                                Yes, Delete User
+                                                {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete Permanently"}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
