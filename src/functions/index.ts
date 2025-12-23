@@ -274,3 +274,121 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
     }
 });
 
+
+/**
+ * A callable function that deletes a user from Firebase Authentication.
+ * This will trigger the `deleteUserDataOnAuthDelete` function for cleanup.
+ */
+export const deleteUserAccount = functions.https.onCall(async (data, context) => {
+    // 1. Admin Check
+    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
+    }
+
+    const { uid } = data;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
+    }
+    
+    // 2. Delete User from Auth
+    try {
+        await admin.auth().deleteUser(uid);
+        functions.logger.log(`Admin initiated deletion for auth user: ${uid}. Cleanup will be handled by onDelete trigger.`);
+        return { success: true, message: `Successfully initiated deletion for user ${uid}.` };
+    } catch (error: any) {
+        if (error.code === 'auth/user-not-found') {
+            functions.logger.warn(`Admin tried to delete user ${uid}, but they were already deleted from Auth. The onDelete trigger should handle any remaining data.`);
+            // Return success because the desired end state (user is gone from Auth) is achieved.
+            return { success: true, message: "User was already deleted from Authentication. Cleanup should proceed." };
+        }
+        functions.logger.error(`Error deleting user ${uid} from Auth:`, error);
+        throw new functions.https.HttpsError('internal', 'Failed to delete user from authentication service.');
+    }
+});
+
+/**
+ * An Auth trigger that cleans up all user data from Firestore and Storage
+ * when a user is deleted from Firebase Authentication.
+ */
+export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (user) => {
+    const { uid } = user;
+    functions.logger.log(`Starting cleanup for deleted user: ${uid}`);
+
+    const db = admin.firestore();
+    const storage = admin.storage();
+    const cleanupPromises: Promise<any>[] = [];
+
+    // --- 1. Firestore Cleanup ---
+
+    // a. Delete main user document and CPM coin document in a batch
+    const mainBatch = db.batch();
+    mainBatch.delete(db.collection('users').doc(uid));
+    mainBatch.delete(db.collection('cpm_coins').doc(uid));
+    cleanupPromises.push(mainBatch.commit());
+
+    // b. Delete documents from top-level collections where userId is stored
+    const collectionsToDelete = [
+        'userPlans', 'withdrawals', 'cpmWithdrawals', 'supportTickets',
+        'feedback', 'kycSubmissions', 'cpm_purchase_logs', 'activityLogs'
+    ];
+    collectionsToDelete.forEach(collectionName => {
+        const query = db.collection(collectionName).where('userId', '==', uid);
+        const promise = query.get().then(snapshot => {
+            if (!snapshot.empty) {
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                return batch.commit();
+            }
+            return Promise.resolve();
+        });
+        cleanupPromises.push(promise);
+    });
+    
+    // Special handling for 'deposits' collection which uses 'uid' field
+    const depositsQuery = db.collection('deposits').where('uid', '==', uid);
+    const depositsPromise = depositsQuery.get().then(snapshot => {
+        if (!snapshot.empty) {
+            const batch = db.batch();
+            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+            return batch.commit();
+        }
+        return Promise.resolve();
+    });
+    cleanupPromises.push(depositsPromise);
+    
+    // c. Delete user's sub-collections
+    const subcollectionsToDelete = ['notifications', 'vipMailbox', 'airdrop_claims'];
+    subcollectionsToDelete.forEach(subcollection => {
+        const path = `users/${uid}/${subcollection}`;
+        const promise = db.collection(path).get().then(snapshot => {
+            if (!snapshot.empty) {
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                return batch.commit();
+            }
+            return Promise.resolve();
+        });
+        cleanupPromises.push(promise);
+    });
+
+    // --- 2. Storage Cleanup ---
+    const bucket = storage.bucket();
+    const userStorageFolders = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
+    userStorageFolders.forEach(folderPath => {
+        cleanupPromises.push(bucket.deleteFiles({ prefix: folderPath }).catch(err => {
+            if (err.code === 404) {
+                functions.logger.log(`Storage folder not found, skipping: ${folderPath}`);
+                return;
+            }
+            functions.logger.error(`Failed to delete storage folder ${folderPath}`, err);
+        }));
+    });
+    
+    // --- Execute all cleanup tasks ---
+    try {
+        await Promise.all(cleanupPromises);
+        functions.logger.log(`Successfully cleaned up all data for user: ${uid}`);
+    } catch (error) {
+        functions.logger.error(`Error during cleanup for user ${uid}:`, error);
+    }
+});
