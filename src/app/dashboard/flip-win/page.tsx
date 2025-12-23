@@ -358,7 +358,7 @@ export default function FlipWinPage() {
 
                             <Button onClick={() => {}} className="w-full h-12 text-base font-bold" disabled={playing}>
                                {playing ? <LoaderCircle className="animate-spin"/> : (
-                                   `Flip a Card for ${cost} ${paymentMethod === 'usd' ? 'Points' : 'CPM'}`
+                                   `Flip a Card for ${cost} ${paymentMethod === 'usd' ? 'balance' : 'CPM'}`
                                )}
                             </Button>
                             <p className="text-xs text-muted-foreground text-center px-4">More flips can increase the chance of a bonus! Good luck!</p>
