@@ -299,7 +299,6 @@ export const hardResetUser = functions.runWith({
     const db = admin.firestore();
 
     try {
-        // --- Step 1: Reset main user document fields ---
         const userRef = db.collection('users').doc(uid);
         const userDoc = await userRef.get();
         if(!userDoc.exists) {
@@ -307,6 +306,8 @@ export const hardResetUser = functions.runWith({
         }
 
         const mainBatch = db.batch();
+
+        // 1. Reset main user document fields
         mainBatch.update(userRef, {
             balance0: 0,
             totalDeposit: 0,
@@ -332,15 +333,26 @@ export const hardResetUser = functions.runWith({
             }
         });
 
-        // --- Step 2: Reset/Delete other root documents ---
+        // 2. Delete/Reset other root documents
         const cpmCoinRef = db.collection('cpm_coins').doc(uid);
         mainBatch.delete(cpmCoinRef);
-        
+
+        const notifRef = userRef.collection('notifications').doc();
+        mainBatch.set(notifRef, {
+            userId: uid,
+            type: 'warning',
+            title: 'Account Reset',
+            message: 'An administrator has performed a full reset on your account. All your progress and balances have been cleared.',
+            status: 'unread',
+            seen: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Commit primary updates first
         await mainBatch.commit();
         functions.logger.log(`Main user data and CPM coins reset for user ${uid}`);
-
-
-        // --- Step 3: Delete documents from various collections ---
+        
+        // 3. Delete documents from various collections in parallel
         const collectionsToClean = [
             { name: 'userPlans', field: 'userId' },
             { name: 'deposits', field: 'uid' },
@@ -352,20 +364,21 @@ export const hardResetUser = functions.runWith({
             { name: 'cpm_purchase_logs', field: 'userId' },
             { name: 'activityLogs', field: 'userId' },
         ];
-
-        for (const { name, field } of collectionsToClean) {
-            const snapshot = await db.collection(name).where(field, '==', uid).get();
+        
+        const deletePromises = collectionsToClean.map(async (collectionInfo) => {
+            const query = db.collection(collectionInfo.name).where(collectionInfo.field, '==', uid);
+            const snapshot = await query.get();
             if (!snapshot.empty) {
                 const deleteBatch = db.batch();
                 snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
                 await deleteBatch.commit();
-                functions.logger.log(`Deleted documents from '${name}' for user ${uid}`);
+                functions.logger.log(`Deleted documents from '${collectionInfo.name}' for user ${uid}`);
             }
-        }
+        });
         
-        // --- Step 4: Delete all sub-collections under the user ---
+        // 4. Delete all sub-collections under the user in parallel
         const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
-        for (const sub of subcollections) {
+        const subcollectionPromises = subcollections.map(async (sub) => {
             const subcollectionRef = userRef.collection(sub);
             const snapshot = await subcollectionRef.get();
             if(!snapshot.empty) {
@@ -374,13 +387,15 @@ export const hardResetUser = functions.runWith({
                 await deleteBatch.commit();
                 functions.logger.log(`Deleted subcollection '${sub}' for user ${uid}`);
             }
-        }
+        });
+        
+        await Promise.all([...deletePromises, ...subcollectionPromises]);
         
         functions.logger.log(`Successfully completed hard reset for user ${uid}`);
         return { success: true, message: `User ${uid} has been successfully reset.` };
         
     } catch (error: any) {
         functions.logger.error(`Error during hard reset for user ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
+        throw new functions.https.HttpsError('internal', 'An error occurred during the reset process. Some data may not have been cleared. Please check logs.');
     }
 });
