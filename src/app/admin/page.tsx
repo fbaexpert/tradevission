@@ -20,7 +20,9 @@ import {
   where,
   setDoc,
   addDoc,
-  runTransaction
+  runTransaction,
+  arrayUnion,
+  arrayRemove
 } from "firebase/firestore";
 import {
   Card,
@@ -73,7 +75,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal, ShieldAlert, ShieldQuestion, KeyRound } from "lucide-react";
+import { Users, LoaderCircle, Bell, Trash2, FileText, ArrowUpFromDot, Coins, Users2, Zap, ShieldCheck, Star, RefreshCw, Edit, Calendar as CalendarIcon, Monitor, Wifi, MoreHorizontal, ShieldAlert, ShieldQuestion, KeyRound, Palette, Badge as BadgeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -196,6 +198,11 @@ export default function AdminUsersPage() {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  
+  const [isBadgeDialogOpen, setIsBadgeDialogOpen] = useState(false);
+  const [selectedUserForBadges, setSelectedUserForBadges] = useState<User | null>(null);
+  const [newBadgeName, setNewBadgeName] = useState("");
+  const [newBadgeColor, setNewBadgeColor] = useState("#4f46e5");
 
 
    useEffect(() => {
@@ -344,6 +351,13 @@ export default function AdminUsersPage() {
     setNewPassword("");
     setConfirmNewPassword("");
     setIsPasswordDialogOpen(true);
+  };
+  
+  const openBadgeDialog = (user: User) => {
+    setSelectedUserForBadges(user);
+    setNewBadgeName("");
+    setNewBadgeColor("#4f46e5");
+    setIsBadgeDialogOpen(true);
   };
 
   const updateUserStatus = async (userId: string, field: string, value: any) => {
@@ -788,6 +802,39 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleAddBadge = async () => {
+    if (!selectedUserForBadges || !newBadgeName.trim() || !db) return;
+    
+    setIsSubmitting(true);
+    const userDocRef = doc(db, 'users', selectedUserForBadges.id);
+    const newBadge = { id: nanoid(), name: newBadgeName, color: newBadgeColor };
+
+    try {
+        await updateDoc(userDocRef, { customBadges: arrayUnion(newBadge) });
+        toast({ title: "Badge Added", description: `Successfully added badge to ${selectedUserForBadges.name}.` });
+        setNewBadgeName("");
+        setNewBadgeColor("#4f46e5");
+        // We let the onSnapshot listener handle the UI update
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Add Failed' });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+  
+  const handleRemoveBadge = async (badge: CustomBadge) => {
+    if (!selectedUserForBadges || !db) return;
+
+    const userDocRef = doc(db, 'users', selectedUserForBadges.id);
+    try {
+        await updateDoc(userDocRef, { customBadges: arrayRemove(badge) });
+        toast({ title: "Badge Removed" });
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Remove Failed' });
+    }
+  };
+
+
   const filteredUsers = users.filter(
     (user) =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -930,6 +977,10 @@ export default function AdminUsersPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => openBadgeDialog(user)}>
+                                  <BadgeIcon className="mr-2 h-4 w-4" />
+                                  Manage Badges
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openPasswordDialog(user)}>
                                   <KeyRound className="mr-2 h-4 w-4" />
                                   Change Password
@@ -1501,6 +1552,79 @@ export default function AdminUsersPage() {
               {isSubmitting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
               Save Password
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isBadgeDialogOpen} onOpenChange={setIsBadgeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Badges for {selectedUserForBadges?.name}</DialogTitle>
+            <DialogDescription>
+              Add or remove custom profile badges for this user.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div>
+              <h4 className="font-bold mb-2 text-white">Current Badges</h4>
+              {selectedUserForBadges?.customBadges && selectedUserForBadges.customBadges.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedUserForBadges.customBadges.map(badge => (
+                    <div key={badge.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                      <Badge style={{ backgroundColor: badge.color }} className="text-white">
+                        {badge.name}
+                      </Badge>
+                      <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>This will permanently remove the "{badge.name}" badge from this user.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleRemoveBadge(badge)} className="bg-destructive hover:bg-destructive/90">
+                                Yes, Remove
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">This user has no custom badges.</p>
+              )}
+            </div>
+
+            <div className="border-t pt-6 space-y-4">
+              <h4 className="font-bold text-white">Add New Badge</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label htmlFor="badge-name">Badge Name</Label>
+                    <Input id="badge-name" value={newBadgeName} onChange={(e) => setNewBadgeName(e.target.value)} />
+                 </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="badge-color">Badge Color</Label>
+                    <div className="flex items-center gap-2 h-10 border border-input rounded-md bg-background px-3">
+                      <Palette className="h-5 w-5 text-muted-foreground"/>
+                      <Input id="badge-color" type="color" value={newBadgeColor} onChange={(e) => setNewBadgeColor(e.target.value)} className="p-0 border-0 h-8 w-8 bg-transparent cursor-pointer" />
+                      <span className="font-mono">{newBadgeColor}</span>
+                    </div>
+                 </div>
+              </div>
+              <Button onClick={handleAddBadge} disabled={isSubmitting || !newBadgeName.trim()}>
+                {isSubmitting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>}
+                Add Badge
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setIsBadgeDialogOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
