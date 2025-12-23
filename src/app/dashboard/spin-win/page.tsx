@@ -1,17 +1,18 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
-import { doc, getDoc, collection, query, where, getDocs, runTransaction, serverTimestamp, writeBatch, increment, Timestamp } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, runTransaction, serverTimestamp, writeBatch, increment, Timestamp, onSnapshot } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LoaderCircle, Star, AlertCircle, Info } from "lucide-react";
+import { LoaderCircle, Star, AlertCircle, Info, ShieldAlert } from "lucide-react";
 import Loader from "@/components/shared/loader";
 import { SpinWheel } from "@/components/shared/spin-wheel";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
+
 
 interface SpinReward {
     label: string;
@@ -27,6 +28,13 @@ interface SpinWinSettings {
 interface UserData {
     depositDone?: boolean;
     lastSpinTimestamp?: Timestamp;
+    totalTeamMembers?: number;
+}
+
+interface FeatureEligibility {
+  enabled: boolean;
+  minPlanValue: number;
+  minTeamSize: number;
 }
 
 const CountdownTimer = ({ targetDate }: { targetDate: Date }) => {
@@ -45,7 +53,6 @@ const CountdownTimer = ({ targetDate }: { targetDate: Date }) => {
             } else {
                 setTimeLeft("00:00:00");
                 clearInterval(interval);
-                // Optionally refresh the page or state
                 window.location.reload();
             }
         }, 1000);
@@ -73,42 +80,75 @@ export default function SpinWinPage() {
     const [finalAngle, setFinalAngle] = useState(0);
     const [isWheelSpinning, setIsWheelSpinning] = useState(false);
 
+    const [eligibilitySettings, setEligibilitySettings] = useState<FeatureEligibility | null>(null);
+    const [isEligible, setIsEligible] = useState(false);
+    const [eligibilityLoading, setEligibilityLoading] = useState(true);
+    const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+
     useEffect(() => {
         if (!db) return;
         
-        const settingsRef = doc(db, "system", "spinWinSettings");
-        getDoc(settingsRef).then(doc => {
+        const settingsRef = doc(db, "system", "settings");
+        const unsubSettings = onSnapshot(settingsRef, (doc) => {
             if (doc.exists()) {
-                setSettings(doc.data() as SpinWinSettings);
+                const data = doc.data();
+                setSettings(data.spinWinSettings || null);
+                setEligibilitySettings(data.featureEligibility || null);
             }
         });
+        
+        return () => unsubSettings();
+
     }, [db]);
 
     useEffect(() => {
         if (!user || !db) {
             setLoadingData(false);
+            setEligibilityLoading(false);
             return;
         }
 
-        const checkData = async () => {
+        const checkEligibilityAndData = async () => {
             setLoadingData(true);
+            setEligibilityLoading(true);
+
             const userRef = doc(db, "users", user.uid);
             const userDoc = await getDoc(userRef);
+            
             if (userDoc.exists()) {
                 const data = userDoc.data() as UserData;
                 setUserData(data);
 
                 if (data.lastSpinTimestamp) {
                     const nextAvailableTime = new Date(data.lastSpinTimestamp.toMillis() + 24 * 60 * 60 * 1000);
-                    if (new Date() < nextAvailableTime) {
-                        setCanSpin(false);
-                        setNextSpinTime(nextAvailableTime);
-                    } else {
-                        setCanSpin(true);
-                        setNextSpinTime(null);
-                    }
+                    setCanSpin(new Date() >= nextAvailableTime);
+                    setNextSpinTime(new Date() < nextAvailableTime ? nextAvailableTime : null);
                 } else {
                     setCanSpin(true);
+                }
+                
+                // Eligibility Check
+                if (eligibilitySettings && eligibilitySettings.enabled) {
+                    const teamSize = data.totalTeamMembers || 0;
+                    if (teamSize >= eligibilitySettings.minTeamSize) {
+                        setIsEligible(true);
+                        setEligibilityError(null);
+                    } else {
+                        const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
+                        const plansSnapshot = await getDocs(plansQuery);
+                        const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= eligibilitySettings.minPlanValue);
+                        
+                        if (hasEligiblePlan) {
+                            setIsEligible(true);
+                            setEligibilityError(null);
+                        } else {
+                            setIsEligible(false);
+                            setEligibilityError(`You must have an active plan of at least $${eligibilitySettings.minPlanValue} or a team of at least ${eligibilitySettings.minTeamSize} members.`);
+                        }
+                    }
+                } else {
+                    setIsEligible(true); // If restrictions are off, everyone is eligible
+                    setEligibilityError(null);
                 }
             }
             
@@ -117,9 +157,15 @@ export default function SpinWinPage() {
             setHasActivePlan(!plansSnapshot.empty);
             
             setLoadingData(false);
+            setEligibilityLoading(false);
         };
-        checkData();
-    }, [user, db, spinning]);
+        
+        // We run this check only when eligibilitySettings is loaded
+        if (eligibilitySettings !== null) {
+            checkEligibilityAndData();
+        }
+
+    }, [user, db, spinning, eligibilitySettings]);
 
     const handleSpin = async () => {
         if (!user || !db || !settings || spinning) return;
@@ -135,7 +181,6 @@ export default function SpinWinPage() {
 
                 if (!userDoc.exists()) throw new Error("User not found.");
                 
-                // Server-side validation
                 const { lastSpinTimestamp } = userDoc.data() as UserData;
                 if (lastSpinTimestamp) {
                     const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -144,7 +189,6 @@ export default function SpinWinPage() {
                     }
                 }
                 
-                // Choose reward based on probability
                 const rewards = settings.rewards;
                 const totalProbability = rewards.reduce((acc, reward) => acc + (reward.probability || 0), 0);
                 let randomPoint = Math.random() * totalProbability;
@@ -162,7 +206,7 @@ export default function SpinWinPage() {
                     randomPoint -= (reward.probability || 0);
                 }
 
-                if (!winningReward) { // Fallback in case of rounding errors
+                if (!winningReward) {
                     winningReward = rewards[rewards.length - 1];
                     winningIndex = rewards.length -1;
                 }
@@ -171,19 +215,16 @@ export default function SpinWinPage() {
                 const newFinalAngle = (finalAngle + 360 * 5) - (winningIndex * anglePerSegment + anglePerSegment / 2);
                 setFinalAngle(newFinalAngle);
 
-                // Apply reward
                 if (winningReward.type === "CASH") {
                     transaction.update(userRef, { balance0: increment(winningReward.value) });
                 }
                 
-                // Update user's last spin time
                 transaction.update(userRef, { lastSpinTimestamp: serverTimestamp() });
                 
                 return { reward: winningReward, finalAngle: newFinalAngle };
             });
             
             if (result) {
-                // Wait for spin animation to finish
                 setTimeout(() => {
                     if (result.reward.type !== "TRY_AGAIN") {
                          toast({
@@ -199,7 +240,7 @@ export default function SpinWinPage() {
                     }
                     setIsWheelSpinning(false);
                     setSpinning(false);
-                }, 4000); // Should match animation duration
+                }, 4000);
             }
 
         } catch (err: any) {
@@ -209,30 +250,44 @@ export default function SpinWinPage() {
         }
     };
     
-    const isEligible = hasActivePlan && userData?.depositDone;
-    const isLoading = authLoading || firebaseLoading || loadingData || !settings;
+    const isLoading = authLoading || firebaseLoading || loadingData || eligibilityLoading || !settings;
     
     if (isLoading) return <Loader />;
     
     const rewards = settings.rewards.map(r => r.label);
+
+    const isSpinDisabled = !isEligible || spinning || !canSpin;
 
     return (
         <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center min-h-[calc(100vh_-_var(--header-height))]">
             <Card className="max-w-2xl w-full border-border/20 shadow-lg shadow-primary/5">
                 <CardHeader className="text-center">
                     <Star className="mx-auto h-12 w-12 text-yellow-400" />
-                    <CardTitle className="text-3xl font-bold text-white font-headline">Spin & Win</CardTitle>
+                    <CardTitle className="text-3xl font-bold text-white font-headline">Spin &amp; Win</CardTitle>
                     <CardDescription>Try your luck once a day to win exciting rewards!</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-8">
-                    {!isEligible ? (
-                        <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Not Eligible</AlertTitle>
-                            <AlertDescription>
-                                You must have at least one active investment plan and have made your first deposit to play Spin & Win.
-                            </AlertDescription>
-                        </Alert>
+                    {!isEligible && eligibilityError ? (
+                         <div className="relative p-6 rounded-lg border bg-gradient-to-br from-red-900/40 via-background to-background overflow-hidden w-full">
+                            <div 
+                                className="absolute inset-0 opacity-10"
+                                style={{
+                                    backgroundImage: `radial-gradient(circle at 10% 20%, hsl(var(--destructive)), transparent 70%), radial-gradient(circle at 90% 80%, hsl(var(--destructive)), transparent 70%)`
+                                }}
+                            />
+                            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                                <div className="p-3 rounded-full bg-red-500/20 border border-red-500/30">
+                                    <ShieldAlert className="h-10 w-10 text-red-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">Not Eligible</h3>
+                                    <p className="text-sm text-red-200/80 mt-1">{eligibilityError}</p>
+                                    <Button asChild size="sm" variant="outline" className="mt-4 bg-transparent hover:bg-white/10 text-white">
+                                        <Link href="/dashboard/plans">View Plans</Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     ) : (
                         <>
                             <SpinWheel
@@ -243,25 +298,28 @@ export default function SpinWinPage() {
 
                             {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
                             
-                            {canSpin ? (
-                                <Button onClick={handleSpin} disabled={spinning} size="lg" className="font-bold text-lg">
+                            {!canSpin && nextSpinTime ? (
+                                 <div className="text-center p-4 rounded-lg bg-muted/50 border border-border/20">
+                                    <p className="text-muted-foreground">Next spin available in:</p>
+                                    <CountdownTimer targetDate={nextSpinTime} />
+                                </div>
+                            ) : (
+                                <Button onClick={handleSpin} disabled={isSpinDisabled} size="lg" className="font-bold text-lg">
                                     {spinning ? <LoaderCircle className="animate-spin" /> : "Spin Now!"}
                                 </Button>
-                            ) : (
-                                <div className="text-center p-4 rounded-lg bg-muted/50 border border-border/20">
-                                    <p className="text-muted-foreground">Next spin available in:</p>
-                                    {nextSpinTime && <CountdownTimer targetDate={nextSpinTime} />}
-                                </div>
                             )}
                             
                              <Alert>
                                 <Info className="h-4 w-4" />
-                                <AlertTitle>Rules & Eligibility</AlertTitle>
+                                <AlertTitle>Rules &amp; Eligibility</AlertTitle>
                                 <AlertDescription>
                                     <ul className="list-disc list-inside space-y-1 mt-2">
                                         <li>You get one free spin every 24 hours.</li>
-                                        <li>You must have an active investment plan.</li>
-                                        <li>You must have made at least one successful deposit.</li>
+                                        {eligibilitySettings?.enabled ? (
+                                            <li>You must meet the minimum team or plan requirements.</li>
+                                        ) : (
+                                            <li>You must have at least one active investment plan and have made a deposit.</li>
+                                        )}
                                     </ul>
                                 </AlertDescription>
                             </Alert>

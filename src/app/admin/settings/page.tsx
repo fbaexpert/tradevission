@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -39,6 +38,7 @@ import {
   FileText,
   Edit,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,7 +53,7 @@ import { deletePageAction } from "../pages/actions";
 
 
 // --- Interface Definitions ---
-interface CpmAirdropRestriction {
+interface FeatureEligibility {
   enabled: boolean;
   minPlanValue: number;
   minTeamSize: number;
@@ -138,7 +138,7 @@ interface AdminSettings {
   planTags: PlanTag[];
   cpmPresale: CpmPresaleSettings;
   footer: FooterSettings;
-  cpmAirdropRestriction: CpmAirdropRestriction;
+  featureEligibility: FeatureEligibility;
 }
 
 const defaultSettings: AdminSettings = {
@@ -175,7 +175,7 @@ const defaultSettings: AdminSettings = {
     supportEmail: "tradevissionn@gmail.com",
     copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
   },
-  cpmAirdropRestriction: {
+  featureEligibility: {
     enabled: false,
     minPlanValue: 50,
     minTeamSize: 5
@@ -205,8 +205,10 @@ export default function AdminSettingsPage() {
           depositBoost: { ...defaultSettings.depositBoost, ...(data.depositBoost || {}) },
           commander: { ...defaultSettings.commander, ...(data.commander || {}) },
           footer: { ...defaultSettings.footer, ...(data.footer || {}) },
-          cpmAirdropRestriction: { ...defaultSettings.cpmAirdropRestriction, ...(data.cpmAirdropRestriction || {}) },
+          featureEligibility: { ...defaultSettings.featureEligibility, ...(data.featureEligibility || data.cpmAirdropRestriction || {}) },
         };
+        // @ts-ignore
+        delete mergedSettings.cpmAirdropRestriction; // clean up old key
         setSettings(mergedSettings);
       } else {
         setDoc(settingsDocRef, defaultSettings);
@@ -279,10 +281,10 @@ export default function AdminSettingsPage() {
       withdrawal: { ...prev.withdrawal, [field]: value },
     }));
   };
-  const handleCpmAirdropRestrictionChange = (field: string, value: any) => {
+  const handleFeatureEligibilityChange = (field: string, value: any) => {
     setSettings((prev) => ({
       ...prev,
-      cpmAirdropRestriction: { ...prev.cpmAirdropRestriction, [field]: value },
+      featureEligibility: { ...prev.featureEligibility, [field]: value },
     }));
   };
   const handleDepositBoostChange = (field: string, value: any) => {
@@ -422,19 +424,19 @@ export default function AdminSettingsPage() {
             <div className="space-y-8">
                  <div className="space-y-4 rounded-lg border p-4">
                     <div className="flex items-center justify-between">
-                        <Label className="text-base flex items-center gap-2 font-bold text-white"><Coins/> CPM & Airdrop Eligibility</Label>
-                        <Switch checked={settings.cpmAirdropRestriction.enabled} onCheckedChange={(v) => handleCpmAirdropRestrictionChange("enabled", v)}/>
+                        <Label className="text-base flex items-center gap-2 font-bold text-white"><ShieldCheck/> Feature Eligibility</Label>
+                        <Switch checked={settings.featureEligibility.enabled} onCheckedChange={(v) => handleFeatureEligibilityChange("enabled", v)}/>
                     </div>
-                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to purchase CPM coins or claim airdrops.</p>
-                     {settings.cpmAirdropRestriction.enabled && (
+                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to use features like Spin &amp; Win, Airdrops, or CPM Coin purchases.</p>
+                     {settings.featureEligibility.enabled && (
                         <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
                             <div className="space-y-2">
                                 <Label htmlFor="min-plan-value">Minimum Active Plan Value ($)</Label>
-                                <Input id="min-plan-value" type="number" value={settings.cpmAirdropRestriction.minPlanValue} onChange={(e) => handleCpmAirdropRestrictionChange("minPlanValue", Number(e.target.value))}/>
+                                <Input id="min-plan-value" type="number" value={settings.featureEligibility.minPlanValue} onChange={(e) => handleFeatureEligibilityChange("minPlanValue", Number(e.target.value))}/>
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="min-team-size">Minimum Team Members</Label>
-                                <Input id="min-team-size" type="number" value={settings.cpmAirdropRestriction.minTeamSize} onChange={(e) => handleCpmAirdropRestrictionChange("minTeamSize", Number(e.target.value))}/>
+                                <Input id="min-team-size" type="number" value={settings.featureEligibility.minTeamSize} onChange={(e) => handleFeatureEligibilityChange("minTeamSize", Number(e.target.value))}/>
                             </div>
                         </div>
                     )}
@@ -463,7 +465,7 @@ export default function AdminSettingsPage() {
                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                <Label>Start Date & Time</Label>
+                                <Label>Start Date &amp; Time</Label>
                                 <div className="flex gap-2">
                                     <Popover>
                                         <PopoverTrigger asChild>
@@ -478,7 +480,7 @@ export default function AdminSettingsPage() {
                                 </div>
                             </div>
                              <div className="space-y-2">
-                                <Label>End Date & Time</Label>
+                                <Label>End Date &amp; Time</Label>
                                  <div className="flex gap-2">
                                     <Popover>
                                         <PopoverTrigger asChild>
@@ -541,7 +543,7 @@ export default function AdminSettingsPage() {
           <TabsContent value="appearance" className="mt-6">
             <div className="space-y-8">
                 <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer & Policy Pages</Label>
+                  <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer &amp; Policy Pages</Label>
                   <p className="text-sm text-muted-foreground">Manage footer content and edit important pages like your privacy policy and terms of service.</p>
                    <div className="space-y-4 pt-4 border-t">
                      <div className="grid md:grid-cols-2 gap-4">
