@@ -788,38 +788,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
-    if (!functions) {
-        toast({
-            variant: "destructive",
-            title: "Action Failed",
-            description: "Cloud Functions are not available. Cannot delete user.",
-        });
-        return;
-    }
-
-    setIsSubmitting(true);
-    const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
-    
-    try {
-        await deleteUserAccount({ uid: user.id });
-        toast({
-            title: "User Deletion Initiated",
-            description: `${user.name}'s account and data are being removed. The list will update shortly.`,
-        });
-    } catch (error: any) {
-        console.error("Deletion failed:", error);
-        toast({
-            variant: "destructive",
-            title: "Deletion Failed",
-            description: error.message || "An unexpected error occurred while deleting the user.",
-        });
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-
   const filteredUsers = users.filter(
     (user) =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -989,29 +957,6 @@ export default function AdminUsersPage() {
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuItem onClick={() => openTeamDialog(user)}>View Team</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Delete User
-                                        </DropdownMenuItem>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                This will permanently delete the user <span className="font-bold text-white">{user.name} ({user.email})</span> and all their associated data. This action is irreversible and cannot be undone.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDeleteUser(user)} className="bg-destructive hover:bg-destructive/90">
-                                                {isSubmitting ? <LoaderCircle className="animate-spin" /> : "Yes, Delete Permanently"}
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
