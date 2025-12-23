@@ -9,7 +9,7 @@ import { getFirebase } from "@/lib/firebase/config";
 import { signOut } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import Loader from "@/components/shared/loader";
-import { LogOut, LayoutGrid, Rocket, ArrowDownToDot, ArrowUpFromDot, User, LifeBuoy, Users2, Coins, Lightbulb, KeyRound, Send, Gift, Star, FlipVertical, ShieldCheck as IdCard } from "lucide-react";
+import { LogOut, LayoutGrid, Rocket, ArrowDownToDot, ArrowUpFromDot, User, LifeBuoy, Users2, Coins, Lightbulb, KeyRound, Send, Gift, Star, FlipVertical, ShieldCheck as IdCard, Contact, DollarSign, Gamepad2, UserCircle } from "lucide-react";
 import NotificationCenter from "@/components/shared/notification-center";
 import {
   AlertDialog,
@@ -33,51 +33,98 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   useSidebar,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/shared/logo";
 import { Footer } from "@/components/shared/footer";
+import React from "react";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutGrid, label: "Home" },
-  { href: "/dashboard/plans", icon: Rocket, label: "Plans" },
-  { href: "/dashboard/presale", icon: Coins, label: "CPM Coin" },
-  { href: "/dashboard/spin-win", icon: Star, label: "Spin & Win" },
-  { href: "/dashboard/flip-win", icon: FlipVertical, label: "Flip & Win" },
-  { href: "/dashboard/team", icon: Users2, label: "Team" },
-  { href: "/dashboard/deposit", icon: ArrowDownToDot, label: "Deposit" },
-  { href: "/dashboard/withdraw", icon: ArrowUpFromDot, label: "Withdraw" },
-  { href: "/dashboard/cpm-withdraw", icon: Coins, label: "CPM Withdraw" },
-  { href: "/dashboard/transfer", icon: Send, label: "Transfer Funds" },
-  { href: "/dashboard/airdrop", icon: Gift, label: "Airdrop" },
-  { href: "/dashboard/kyc", icon: IdCard, label: "KYC Verification" },
-  { href: "/dashboard/redeem", icon: KeyRound, label: "Redeem Code" },
-  { href: "/dashboard/support", icon: LifeBuoy, label: "Support" },
-  { href: "/dashboard/feedback", icon: Lightbulb, label: "Feedback" },
-  { href: "/dashboard/profile", icon: User, label: "Profile" },
+const navGroups = [
+  {
+    label: "Main",
+    icon: UserCircle,
+    items: [
+      { href: "/dashboard", icon: LayoutGrid, label: "Home" },
+      { href: "/dashboard/plans", icon: Rocket, label: "Plans" },
+      { href: "/dashboard/team", icon: Users2, label: "Team" },
+      { href: "/dashboard/profile", icon: User, label: "Profile" },
+    ],
+  },
+  {
+    label: "Transactions",
+    icon: DollarSign,
+    items: [
+        { href: "/dashboard/deposit", icon: ArrowDownToDot, label: "Deposit" },
+        { href: "/dashboard/withdraw", icon: ArrowUpFromDot, label: "Withdraw" },
+        { href: "/dashboard/transfer", icon: Send, label: "Transfer Funds" },
+    ],
+  },
+   {
+    label: "CPM Coin",
+    icon: Coins,
+    items: [
+        { href: "/dashboard/presale", icon: Coins, label: "CPM Coin" },
+        { href: "/dashboard/cpm-withdraw", icon: ArrowUpFromDot, label: "CPM Withdraw" },
+    ],
+  },
+  {
+    label: "Rewards & Games",
+    icon: Gamepad2,
+    items: [
+        { href: "/dashboard/spin-win", icon: Star, label: "Spin & Win" },
+        { href: "/dashboard/flip-win", icon: FlipVertical, label: "Flip & Win" },
+        { href: "/dashboard/airdrop", icon: Gift, label: "Airdrop" },
+        { href: "/dashboard/redeem", icon: KeyRound, label: "Redeem Code" },
+    ]
+  },
+  {
+    label: "Account & Support",
+    icon: Contact,
+    items: [
+        { href: "/dashboard/kyc", icon: IdCard, label: "KYC Verification" },
+        { href: "/dashboard/support", icon: LifeBuoy, label: "Support" },
+        { href: "/dashboard/feedback", icon: Lightbulb, label: "Feedback" },
+    ]
+  }
 ];
+
 
 function DashboardSidebarContent() {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
 
   return (
-     <SidebarMenu>
-        {navItems.map((item) => (
-          <SidebarMenuItem key={item.label}>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === item.href}
-              tooltip={item.label}
-              onClick={() => setOpenMobile(false)}
-            >
-              <Link href={item.href} className="relative">
-                <item.icon />
-                <span>{item.label}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
+     <>
+      {navGroups.map((group, index) => (
+         <React.Fragment key={group.label}>
+          {index > 0 && <SidebarSeparator />}
+          <SidebarGroup>
+              <SidebarGroupLabel className="flex items-center gap-2">
+                  <group.icon size={14}/> {group.label}
+              </SidebarGroupLabel>
+              <SidebarMenu>
+                  {group.items.map((item) => (
+                  <SidebarMenuItem key={item.label}>
+                      <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.href}
+                      tooltip={item.label}
+                      onClick={() => setOpenMobile(false)}
+                      >
+                      <Link href={item.href} className="relative">
+                          <item.icon />
+                          <span>{item.label}</span>
+                      </Link>
+                      </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+          </SidebarGroup>
+         </React.Fragment>
+      ))}
+    </>
   )
 }
 
