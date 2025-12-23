@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart, DollarSign, Rocket, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from 'next/navigation';
 import Loader from "@/components/shared/loader";
 
@@ -24,23 +24,14 @@ const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementTy
   </div>
 );
 
-export default function LandingPage() {
+
+function LandingPageContent() {
   const [loginHref, setLoginHref] = useState("/login");
-  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true);
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // --- PASSWORD RESET REDIRECT ---
-    const mode = searchParams.get('mode');
-    const oobCode = searchParams.get('oobCode');
-
-    if (mode === 'resetPassword' && oobCode) {
-      // Use window.location.replace for a hard, immediate redirect that doesn't push to history.
-      window.location.replace(`/reset-password?mode=${mode}&oobCode=${oobCode}`);
-      return; // Stop further execution
-    }
-
-    // --- REFERRAL CODE LOGIC ---
+    // This effect now ONLY handles the referral logic.
+    // The password reset is handled by the parent component.
     const refId = searchParams.get('ref');
     if (refId) {
         localStorage.setItem('tradevission_ref', refId);
@@ -51,20 +42,10 @@ export default function LandingPage() {
             setLoginHref(`/login?ref=${storedRefId}`);
         }
     }
-
-    // If we reach here, it means we are not redirecting.
-    setIsCheckingRedirect(false);
-
   }, [searchParams]);
 
-  // While checking, show a loader to prevent the landing page from flashing.
-  if (isCheckingRedirect) {
-    return <Loader />;
-  }
-
-  // --- NORMAL LANDING PAGE CONTENT ---
   return (
-      <div className="bg-background text-foreground flex flex-col">
+    <div className="bg-background text-foreground flex flex-col min-h-screen">
       {/* Header */}
       <header className="py-4 px-6 md:px-12 flex justify-between items-center border-b border-border/20 backdrop-blur-sm sticky top-0 z-50 bg-background/50">
         <div className="flex items-center gap-3">
@@ -156,5 +137,41 @@ export default function LandingPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+function RedirectHandler() {
+  const searchParams = useSearchParams();
+  const [isRedirecting, setIsRedirecting] = useState(true);
+
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const oobCode = searchParams.get('oobCode');
+
+    if (mode === 'resetPassword' && oobCode) {
+      // Perform an immediate, client-side redirect.
+      // window.location.replace is used to prevent this intermediate page from being in the browser history.
+      window.location.replace(`/reset-password?mode=${mode}&oobCode=${oobCode}`);
+    } else {
+      // If it's not a password reset link, stop showing the loader and allow the page to render.
+      setIsRedirecting(false);
+    }
+  }, [searchParams]);
+
+  if (isRedirecting) {
+    // While checking, show a full-screen loader to prevent any "flash" of the landing page.
+    return <Loader />;
+  }
+
+  // If not redirecting, render the normal landing page content.
+  return <LandingPageContent />;
+}
+
+export default function Home() {
+  return (
+    // Suspense is crucial for useSearchParams to work correctly.
+    <Suspense fallback={<Loader />}>
+      <RedirectHandler />
+    </Suspense>
   );
 }
