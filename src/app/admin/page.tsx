@@ -802,14 +802,12 @@ export default function AdminUsersPage() {
     if (!functions) return;
     setIsSubmitting(true);
     
-    // This will call the Cloud Function to delete the user from Firebase Auth.
-    // The `onDelete` trigger in `src/functions/index.ts` will then handle all data cleanup automatically.
-    const deleteUserByAdmin = httpsCallable(functions, 'deleteUserAccount');
+    const deleteUser = httpsCallable(functions, 'deleteUserAccount');
     try {
-      await deleteUserByAdmin({ uid: user.id });
+      await deleteUser({ uid: user.id });
       toast({
         title: "User Deletion Process Started",
-        description: `The account for ${user.email} is being removed. Real-time sync will update the list.`,
+        description: `The account and all data for ${user.email} are being removed. The UI will update shortly.`,
       });
     } catch (error: any) {
       console.error("Deletion failed:", error);
@@ -1045,7 +1043,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data from Authentication and the database. This action is irreversible.
+                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data from Authentication, Database, and Storage. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
