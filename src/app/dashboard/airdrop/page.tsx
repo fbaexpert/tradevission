@@ -31,6 +31,12 @@ interface UserClaim {
     airdropTitle: string;
 }
 
+interface CpmAirdropRestrictionSettings {
+  enabled: boolean;
+  minPlanValue: number;
+  minTeamSize: number;
+}
+
 export default function AirdropPage() {
     const { user, loading: authLoading } = useAuth();
     const { db, loading: firebaseLoading } = useFirebase();
@@ -41,8 +47,11 @@ export default function AirdropPage() {
     const [claimedReward, setClaimedReward] = useState<{ amount: number; assetType: "balance" | "cpm_coin" } | null>(null);
     const { toast } = useToast();
     
+    const [restrictionSettings, setRestrictionSettings] = useState<CpmAirdropRestrictionSettings | null>(null);
     const [isEligible, setIsEligible] = useState(false);
     const [eligibilityLoading, setEligibilityLoading] = useState(true);
+    const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+
 
     useEffect(() => {
         if (!db) return;
@@ -53,6 +62,13 @@ export default function AirdropPage() {
             const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AirdropEvent));
             setAirdropEvents(events);
             if (!user) setLoading(false);
+        });
+
+        const settingsDocRef = doc(db, "system", "settings");
+        const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
+            if (doc.exists()) {
+                setRestrictionSettings(doc.data().cpmAirdropRestriction);
+            }
         });
         
         let unsubscribeClaims: () => void = () => {};
@@ -65,29 +81,62 @@ export default function AirdropPage() {
                 });
                 setUserClaims(claims);
             });
-
-            // Check for eligibility
-            setEligibilityLoading(true);
-            const plansQuery = query(
-                collection(db, "userPlans"),
-                where("userId", "==", user.uid),
-                where("status", "==", "active")
-            );
-
-            getDocs(plansQuery).then(plansSnapshot => {
-                const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= 10);
-                setIsEligible(hasEligiblePlan);
-            }).finally(() => {
-                 setEligibilityLoading(false);
-                 setLoading(false);
-            });
-
-        } else {
-            setEligibilityLoading(false);
         }
 
-        return () => { unsubscribeEvents(); unsubscribeClaims(); };
+        return () => { unsubscribeEvents(); unsubscribeClaims(); unsubscribeSettings(); };
     }, [db, user]);
+
+    useEffect(() => {
+        if (!user || !db || restrictionSettings === null) {
+            if(!authLoading && !firebaseLoading) {
+                setEligibilityLoading(false);
+                if (restrictionSettings && restrictionSettings.enabled) {
+                   setIsEligible(false);
+                } else {
+                    setIsEligible(true);
+                }
+            }
+            return;
+        };
+
+        if (!restrictionSettings.enabled) {
+            setIsEligible(true);
+            setEligibilityLoading(false);
+            setEligibilityError(null);
+            return;
+        }
+
+        const checkEligibility = async () => {
+            setEligibilityLoading(true);
+            setEligibilityError(null);
+
+            const userDocRef = doc(db, "users", user.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+                const teamSize = userDoc.data()?.totalTeamMembers || 0;
+                if (teamSize >= restrictionSettings.minTeamSize) {
+                    setIsEligible(true);
+                    setEligibilityLoading(false);
+                    return;
+                }
+            }
+
+            const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
+            const plansSnapshot = await getDocs(plansQuery);
+            const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= restrictionSettings.minPlanValue);
+
+            if (hasEligiblePlan) {
+                setIsEligible(true);
+            } else {
+                setIsEligible(false);
+                setEligibilityError(`You must have an active plan of at least $${restrictionSettings.minPlanValue} or a team of at least ${restrictionSettings.minTeamSize} members.`);
+            }
+            setEligibilityLoading(false);
+        };
+
+        checkEligibility();
+
+    }, [user, db, restrictionSettings, authLoading, firebaseLoading]);
 
     const handleClaim = async (event: AirdropEvent) => {
         if (!user || !db || isClaiming || !isEligible) return;
@@ -96,15 +145,6 @@ export default function AirdropPage() {
 
         try {
             const finalReward = await runTransaction(db, async (transaction) => {
-                // Server-side eligibility check
-                const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
-                const plansSnapshot = await getDocs(plansQuery);
-                const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= 10);
-
-                if (!hasEligiblePlan) {
-                    throw new Error("You must have an active plan of at least $10 to claim airdrops.");
-                }
-
                 const airdropRef = doc(db, "airdrops", event.id);
                 const airdropDoc = await transaction.get(airdropRef);
 
@@ -125,18 +165,15 @@ export default function AirdropPage() {
                 let rewardAmount = 0;
                 if (remainingPackets > 1) {
                     const avg = remainingAmount / remainingPackets;
-                    // Get a random amount between 10% and 190% of the average
                     rewardAmount = Math.random() * avg * 1.8 + avg * 0.1;
                 } else {
-                    rewardAmount = remainingAmount; // Last person gets the rest
+                    rewardAmount = remainingAmount; 
                 }
                 
-                // Ensure reward doesn't exceed remaining amount and handle floating point issues
                 rewardAmount = Math.min(remainingAmount, rewardAmount);
                 rewardAmount = Math.floor(rewardAmount * 100) / 100;
                 
                 if (rewardAmount <= 0 && remainingAmount > 0) {
-                     // This can happen if the remainder is tiny, give it all
                     rewardAmount = remainingAmount;
                 }
                 
@@ -144,7 +181,6 @@ export default function AirdropPage() {
                      throw new Error("The airdrop pool is empty.");
                 }
 
-                // Update user's balance or cpm coins
                 if (airdropData.assetType === 'balance') {
                     const userRef = doc(db, "users", user.uid);
                     transaction.update(userRef, { balance0: (await transaction.get(userRef)).data()?.balance0 + rewardAmount });
@@ -155,7 +191,6 @@ export default function AirdropPage() {
                     transaction.set(coinRef, { amount: currentCoins + rewardAmount, userId: user.uid }, { merge: true });
                 }
 
-                // Update airdrop event
                 const newClaimedCount = airdropData.claimedCount + 1;
                 const newClaimedAmount = airdropData.claimedAmount + rewardAmount;
                 const newStatus = newClaimedCount >= airdropData.packetCount ? 'finished' : 'active';
@@ -164,14 +199,13 @@ export default function AirdropPage() {
                     claimedCount: newClaimedCount,
                     claimedAmount: newClaimedAmount,
                     status: newStatus,
-                    [`claims.${user.uid}`]: rewardAmount // Store user claim to prevent duplicates
+                    [`claims.${user.uid}`]: rewardAmount
                 });
 
                 return { amount: rewardAmount, assetType: airdropData.assetType };
             });
 
             if (finalReward) {
-                 // Non-transactional writes for notifications and logs
                 const batch = writeBatch(db);
                 const claimRef = doc(collection(db, "users", user.uid, "airdrop_claims"), event.id);
                 batch.set(claimRef, {
@@ -222,12 +256,12 @@ export default function AirdropPage() {
                     </CardHeader>
                 </Card>
 
-                {!isEligible && (
+                {!isEligible && eligibilityError && (
                     <Alert variant="destructive">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Not Eligible for Airdrops</AlertTitle>
                         <AlertDescription>
-                            You must have an active investment plan of at least $10 to be eligible to claim airdrops. Please purchase a plan to participate.
+                           {eligibilityError}
                         </AlertDescription>
                     </Alert>
                 )}
@@ -245,7 +279,7 @@ export default function AirdropPage() {
                             return (
                                 <Card key={event.id} className={cn(
                                     "border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20 flex flex-col",
-                                    (isClaimed || event.status === 'finished') && "opacity-60"
+                                    (isClaimed || event.status === 'finished' || !isEligible) && "opacity-60"
                                 )}>
                                     <CardHeader>
                                         <CardTitle className="text-xl text-white font-bold">{event.title}</CardTitle>

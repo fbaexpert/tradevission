@@ -38,6 +38,7 @@ import {
   Copyright,
   FileText,
   Edit,
+  Users,
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,6 +53,11 @@ import { deletePageAction } from "../pages/actions";
 
 
 // --- Interface Definitions ---
+interface CpmAirdropRestriction {
+  enabled: boolean;
+  minPlanValue: number;
+  minTeamSize: number;
+}
 interface CommanderSettings {
   weeklySalary: number;
   weeklyCpmCoins: number;
@@ -132,6 +138,7 @@ interface AdminSettings {
   planTags: PlanTag[];
   cpmPresale: CpmPresaleSettings;
   footer: FooterSettings;
+  cpmAirdropRestriction: CpmAirdropRestriction;
 }
 
 const defaultSettings: AdminSettings = {
@@ -167,7 +174,12 @@ const defaultSettings: AdminSettings = {
   footer: {
     supportEmail: "tradevissionn@gmail.com",
     copyrightText: "© 2023-2025 TradeVission. All Rights Reserved."
-  }
+  },
+  cpmAirdropRestriction: {
+    enabled: false,
+    minPlanValue: 50,
+    minTeamSize: 5
+  },
 };
 
 
@@ -193,6 +205,7 @@ export default function AdminSettingsPage() {
           depositBoost: { ...defaultSettings.depositBoost, ...(data.depositBoost || {}) },
           commander: { ...defaultSettings.commander, ...(data.commander || {}) },
           footer: { ...defaultSettings.footer, ...(data.footer || {}) },
+          cpmAirdropRestriction: { ...defaultSettings.cpmAirdropRestriction, ...(data.cpmAirdropRestriction || {}) },
         };
         setSettings(mergedSettings);
       } else {
@@ -264,6 +277,12 @@ export default function AdminSettingsPage() {
     setSettings((prev) => ({
       ...prev,
       withdrawal: { ...prev.withdrawal, [field]: value },
+    }));
+  };
+  const handleCpmAirdropRestrictionChange = (field: string, value: any) => {
+    setSettings((prev) => ({
+      ...prev,
+      cpmAirdropRestriction: { ...prev.cpmAirdropRestriction, [field]: value },
     }));
   };
   const handleDepositBoostChange = (field: string, value: any) => {
@@ -401,6 +420,26 @@ export default function AdminSettingsPage() {
 
           <TabsContent value="promotions" className="mt-6">
             <div className="space-y-8">
+                 <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                        <Label className="text-base flex items-center gap-2 font-bold text-white"><Coins/> CPM & Airdrop Eligibility</Label>
+                        <Switch checked={settings.cpmAirdropRestriction.enabled} onCheckedChange={(v) => handleCpmAirdropRestrictionChange("enabled", v)}/>
+                    </div>
+                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to purchase CPM coins or claim airdrops.</p>
+                     {settings.cpmAirdropRestriction.enabled && (
+                        <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
+                            <div className="space-y-2">
+                                <Label htmlFor="min-plan-value">Minimum Active Plan Value ($)</Label>
+                                <Input id="min-plan-value" type="number" value={settings.cpmAirdropRestriction.minPlanValue} onChange={(e) => handleCpmAirdropRestrictionChange("minPlanValue", Number(e.target.value))}/>
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="min-team-size">Minimum Team Members</Label>
+                                <Input id="min-team-size" type="number" value={settings.cpmAirdropRestriction.minTeamSize} onChange={(e) => handleCpmAirdropRestrictionChange("minTeamSize", Number(e.target.value))}/>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <div className="space-y-4 rounded-lg border p-4">
                     <div className="flex items-center justify-between">
                          <Label className="text-base flex items-center gap-2 font-bold text-white"><Gift/> Deposit Boost Event</Label>

@@ -39,6 +39,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CpmCoinIcon } from "@/components/shared/cpm-coin-icon";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import Loader from "@/components/shared/loader";
+
 
 interface CpmCoinOffer {
   enabled: boolean;
@@ -62,6 +64,12 @@ interface CpmCoinPackage {
 
 interface CpmPresaleSettings {
   packages: CpmCoinPackage[];
+}
+
+interface CpmAirdropRestrictionSettings {
+  enabled: boolean;
+  minPlanValue: number;
+  minTeamSize: number;
 }
 
 const OfferCountdown = ({
@@ -118,7 +126,8 @@ const OfferCountdown = ({
 };
 
 export default function PreSalePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { db, loading: firebaseLoading } = useFirebase();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +137,12 @@ export default function PreSalePage() {
     "inactive" | "upcoming" | "active"
   >("inactive");
   const [purchasingPackageId, setPurchasingPackageId] = useState<string | null>(null);
-  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
+
+  const [restrictionSettings, setRestrictionSettings] = useState<CpmAirdropRestrictionSettings | null>(null);
+  const [isEligible, setIsEligible] = useState(false);
+  const [eligibilityLoading, setEligibilityLoading] = useState(true);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!offer || !offer.enabled) {
@@ -157,47 +171,85 @@ export default function PreSalePage() {
   }, [offer]);
 
   useEffect(() => {
-    const { db } = getFirebase();
-    // Listen for offer settings
+    if (!db) return;
     const settingsDocRef = doc(db, "system", "settings");
     const unsubscribeSettings = onSnapshot(settingsDocRef, (doc) => {
       if (doc.exists()) {
         const settingsData = doc.data();
         const defaultOffer: CpmCoinOffer = {
-          enabled: false,
-          title: "",
-          bonusPercentage: 0,
-          startTime: new Date().toISOString(),
-          endTime: new Date().toISOString(),
-          description: "",
-          includeVipCode: false,
+          enabled: false, title: "", bonusPercentage: 0, startTime: new Date().toISOString(),
+          endTime: new Date().toISOString(), description: "", includeVipCode: false,
         };
-        const defaultPresale: CpmPresaleSettings = {
-          packages: [],
-        };
+        const defaultPresale: CpmPresaleSettings = { packages: [] };
         setOffer({ ...defaultOffer, ...(settingsData.cpmCoinOffer || {}) });
-        setPresaleSettings({
-          ...defaultPresale,
-          ...(settingsData.cpmPresale || {}),
-        });
+        setPresaleSettings({ ...defaultPresale, ...(settingsData.cpmPresale || {}) });
+        setRestrictionSettings(settingsData.cpmAirdropRestriction || null);
       }
-      setLoadingSettings(false);
+      setLoadingData(false);
     });
     
     return () => {
       unsubscribeSettings();
     };
-  }, []);
+  }, [db]);
+
+  useEffect(() => {
+    if (!user || !db || restrictionSettings === null) {
+      if (!authLoading && !firebaseLoading) {
+        setEligibilityLoading(false);
+        if (restrictionSettings && restrictionSettings.enabled) {
+          setIsEligible(false);
+        } else {
+          setIsEligible(true);
+        }
+      }
+      return;
+    }
+
+    if (!restrictionSettings.enabled) {
+      setIsEligible(true);
+      setEligibilityLoading(false);
+      setEligibilityError(null);
+      return;
+    }
+
+    const checkEligibility = async () => {
+      setEligibilityLoading(true);
+      setEligibilityError(null);
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        const teamSize = userDoc.data()?.totalTeamMembers || 0;
+        if (teamSize >= restrictionSettings.minTeamSize) {
+          setIsEligible(true);
+          setEligibilityLoading(false);
+          return;
+        }
+      }
+
+      const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
+      const plansSnapshot = await getDocs(plansQuery);
+      const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= restrictionSettings.minPlanValue);
+
+      if (hasEligiblePlan) {
+        setIsEligible(true);
+      } else {
+        setIsEligible(false);
+        setEligibilityError(`You must have an active plan of at least $${restrictionSettings.minPlanValue} or a team of at least ${restrictionSettings.minTeamSize} members to purchase CPM Coins.`);
+      }
+      setEligibilityLoading(false);
+    };
+
+    checkEligibility();
+  }, [user, db, restrictionSettings, authLoading, firebaseLoading]);
+
   
   const COIN_NAME = "CPM Coin";
 
   const handlePurchase = async (pkg: CpmCoinPackage) => {
     if (!user) {
-      toast({
-        variant: "destructive",
-        title: "Authentication Error",
-        description: "You must be logged in to purchase.",
-      });
+      toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to purchase." });
       return;
     }
 
@@ -218,14 +270,9 @@ export default function PreSalePage() {
       const userBalance = userData.balance0 || 0;
 
       if (userBalance < pkg.price) {
-        throw new Error(
-          `Insufficient balance. You need $${pkg.price.toFixed(
-            2
-          )} to purchase the ${pkg.name}.`
-        );
+        throw new Error(`Insufficient balance. You need $${pkg.price.toFixed(2)} to purchase the ${pkg.name}.`);
       }
 
-      // Final server-side check for active offer
       const settingsDoc = await getDoc(doc(db, "system", "settings"));
       let finalBonusCoins = 0;
       let finalOfferTitle: string | null = null;
@@ -240,13 +287,9 @@ export default function PreSalePage() {
             const startTime = new Date(serverOffer.startTime).getTime();
             const endTime = new Date(serverOffer.endTime).getTime();
             if (now >= startTime && now <= endTime) {
-              finalBonusCoins = Math.floor(
-                pkg.coinAmount * (serverOffer.bonusPercentage / 100)
-              );
+              finalBonusCoins = Math.floor(pkg.coinAmount * (serverOffer.bonusPercentage / 100));
               finalOfferTitle = serverOffer.title;
-              if (serverOffer.includeVipCode) {
-                 shouldGrantVipCode = true;
-              }
+              if (serverOffer.includeVipCode) { shouldGrantVipCode = true; }
             }
           }
         }
@@ -254,103 +297,54 @@ export default function PreSalePage() {
       const finalTotalCoinsReceived = pkg.coinAmount + finalBonusCoins;
 
       const batch = writeBatch(db);
+      batch.update(userDocRef, { balance0: increment(-pkg.price) });
 
-      // 1. Deduct from user balance
-      batch.update(userDocRef, {
-        balance0: increment(-pkg.price),
-      });
-
-      // 2. Add or update user's coin balance (including bonus)
       const coinDocRef = doc(db, "cpm_coins", user.uid);
-      batch.set(
-        coinDocRef,
-        {
-          amount: increment(finalTotalCoinsReceived),
-          userId: user.uid,
-          lastPurchaseAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      batch.set(coinDocRef, { amount: increment(finalTotalCoinsReceived), userId: user.uid, lastPurchaseAt: serverTimestamp() }, { merge: true });
 
-      // 3. Create a transaction log
       const logRef = doc(collection(db, "cpm_purchase_logs"));
       batch.set(logRef, {
-        userId: user.uid,
-        packageName: pkg.name,
-        quantity: pkg.coinAmount,
-        pricePerCoin: pkg.price / pkg.coinAmount,
-        totalPrice: pkg.price,
-        bonusCoins: finalBonusCoins,
-        offerTitle: finalOfferTitle,
-        createdAt: serverTimestamp(),
+        userId: user.uid, packageName: pkg.name, quantity: pkg.coinAmount, pricePerCoin: pkg.price / pkg.coinAmount,
+        totalPrice: pkg.price, bonusCoins: finalBonusCoins, offerTitle: finalOfferTitle, createdAt: serverTimestamp(),
       });
 
-      // 4. Grant free VIP code if applicable - MANUAL ADMIN NOTIFICATION
       if (shouldGrantVipCode) {
-        // Notify user about the upcoming VIP code
         const vipNotifRef = doc(collection(db, "users", user.uid, "notifications"));
         batch.set(vipNotifRef, {
-            userId: user.uid,
-            type: 'success',
-            title: '🎁 Free VIP Code Earned!',
+            userId: user.uid, type: 'success', title: '🎁 Free VIP Code Earned!',
             message: `You've earned a free VIP code for purchasing the ${pkg.name}. Our team will send it to your VIP Mailbox shortly.`,
-            status: 'unread',
-            seen: false,
-            createdAt: serverTimestamp(),
+            status: 'unread', seen: false, createdAt: serverTimestamp(),
         });
-        // Create an admin alert for manual code distribution
         const adminAlertRef = doc(collection(db, "adminAlerts"));
         batch.set(adminAlertRef, {
-            type: 'vip_code_earned',
-            message: `User ${user.email} purchased package "${pkg.name}" and is eligible for a free VIP code.`,
-            userId: user.uid,
-            userEmail: user.email,
-            relatedId: logRef.id,
-            createdAt: serverTimestamp(),
-            status: 'new'
+            type: 'vip_code_earned', message: `User ${user.email} purchased package "${pkg.name}" and is eligible for a free VIP code.`,
+            userId: user.uid, userEmail: user.email, relatedId: logRef.id, createdAt: serverTimestamp(), status: 'new'
         });
       }
       
-      // 5. Send purchase notification
-      const notifRef = doc(
-        collection(db, "users", user.uid, "notifications")
-      );
+      const notifRef = doc(collection(db, "users", user.uid, "notifications"));
       batch.set(notifRef, {
-        userId: user.uid,
-        type: "success",
-        title: `🎉 ${COIN_NAME} Purchased!`,
-        message: `You successfully purchased ${
-          pkg.coinAmount
-        } ${COIN_NAME} ${
-          finalBonusCoins > 0 ? `(+${finalBonusCoins} bonus)` : ""
-        } for $${pkg.price.toFixed(2)}.`,
-        amount: pkg.price,
-        status: "unread",
-        seen: false,
-        createdAt: serverTimestamp(),
-        relatedId: logRef.id,
+        userId: user.uid, type: "success", title: `🎉 ${COIN_NAME} Purchased!`,
+        message: `You successfully purchased ${pkg.coinAmount} ${COIN_NAME} ${finalBonusCoins > 0 ? `(+${finalBonusCoins} bonus)` : ""} for $${pkg.price.toFixed(2)}.`,
+        amount: pkg.price, status: "unread", seen: false, createdAt: serverTimestamp(), relatedId: logRef.id,
       });
 
       await batch.commit();
 
-      toast({
-        title: "Purchase Successful!",
-        description: `You are now the owner of ${finalTotalCoinsReceived} more ${COIN_NAME}.`,
-      });
+      toast({ title: "Purchase Successful!", description: `You are now the owner of ${finalTotalCoinsReceived} more ${COIN_NAME}.` });
     } catch (err: any) {
       setError(err.message);
-      toast({
-        variant: "destructive",
-        title: "Purchase Failed",
-        description: err.message,
-      });
+      toast({ variant: "destructive", title: "Purchase Failed", description: err.message });
     } finally {
       setLoading(false);
       setPurchasingPackageId(null);
     }
   };
 
-  const isPurchaseDisabled = loading || loadingSettings;
+  const isPurchaseDisabled = loading || loadingData || eligibilityLoading || !isEligible;
+  
+  if (authLoading || firebaseLoading || loadingData) return <Loader />;
+
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -365,6 +359,14 @@ export default function PreSalePage() {
             balance before the official launch.
           </p>
         </header>
+
+        {!isEligible && eligibilityError && (
+             <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Not Eligible to Purchase</AlertTitle>
+                <AlertDescription>{eligibilityError}</AlertDescription>
+            </Alert>
+        )}
 
         <div className="p-6 rounded-lg bg-background/40 border border-border/30 space-y-3 max-w-3xl mx-auto">
             <h3 className="font-bold text-white flex items-center gap-2"><Info className="h-5 w-5 text-primary"/> How It Works</h3>
@@ -427,7 +429,8 @@ export default function PreSalePage() {
             {presaleSettings?.packages.map((pkg) => (
                 <Card key={pkg.id} className={cn(
                     "flex flex-col border-border/20 shadow-lg shadow-primary/5 bg-gradient-to-br from-card to-muted/20 transition-all duration-300 hover:shadow-primary/20 hover:-translate-y-1",
-                    pkg.tagline?.toLowerCase().includes("popular") && "border-primary/50"
+                    pkg.tagline?.toLowerCase().includes("popular") && "border-primary/50",
+                    isPurchaseDisabled && "opacity-60"
                 )}>
                     <CardHeader className="text-center">
                         {pkg.tagline && (
@@ -457,7 +460,7 @@ export default function PreSalePage() {
                     <CardContent>
                         <Button size="lg" className="w-full font-bold" onClick={() => handlePurchase(pkg)} disabled={isPurchaseDisabled || purchasingPackageId === pkg.id}>
                             {purchasingPackageId === pkg.id ? <LoaderCircle className="animate-spin" /> : <Wallet className="mr-2"/>}
-                            {loadingSettings ? 'Loading...' : 'Purchase Now'}
+                            {loadingData ? 'Loading...' : 'Purchase Now'}
                         </Button>
                     </CardContent>
                 </Card>
