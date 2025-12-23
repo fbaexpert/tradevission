@@ -360,8 +360,8 @@ export default function PreSalePage() {
         </header>
 
         {!isEligible && eligibilityError && (
-             <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
+             <Alert className="bg-yellow-500/10 border-yellow-500/30 text-yellow-300">
+                <AlertTriangle className="h-4 w-4 !text-yellow-300" />
                 <AlertTitle>Not Eligible to Purchase</AlertTitle>
                 <AlertDescription>{eligibilityError}</AlertDescription>
             </Alert>
