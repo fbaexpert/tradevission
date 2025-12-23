@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
-import { collection, doc, onSnapshot, query, runTransaction, serverTimestamp, Timestamp, writeBatch, orderBy, where, getDocs } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, runTransaction, serverTimestamp, Timestamp, writeBatch, orderBy, where, getDocs, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoaderCircle, Gift, PartyPopper, CheckCircle, AlertTriangle } from "lucide-react";
