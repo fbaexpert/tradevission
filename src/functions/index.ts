@@ -181,6 +181,103 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
 
 
 /**
+ * A robust, callable Cloud Function for admins to completely delete a user and all their data.
+ * This function is designed to be the single point of entry for user deletion.
+ */
+export const deleteUserAccount = functions.runWith({
+    timeoutSeconds: 300,
+    memory: '512MB'
+}).https.onCall(async (data, context) => {
+    // 1. Admin Authentication Check
+    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
+    }
+
+    const uid = data.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a user UID.');
+    }
+
+    functions.logger.log(`Admin-initiated deletion for user: ${uid}`);
+    const db = admin.firestore();
+    const storage = admin.storage();
+
+    try {
+        // --- Step 1: Delete all Firestore data associated with the user ---
+        const userDocRef = db.collection('users').doc(uid);
+        
+        // Delete sub-collections first
+        const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
+        for (const sub of subcollections) {
+            const subcollectionRef = userDocRef.collection(sub);
+            const snapshot = await subcollectionRef.get();
+            if (!snapshot.empty) {
+                const deleteBatch = db.batch();
+                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                await deleteBatch.commit();
+                functions.logger.log(`Deleted subcollection '${sub}' for user ${uid}`);
+            }
+        }
+        
+        // Delete documents from top-level collections
+        const collectionsToClean = [
+            { name: 'userPlans', field: 'userId' },
+            { name: 'deposits', field: 'uid' },
+            { name: 'withdrawals', field: 'userId' },
+            { name: 'cpmWithdrawals', field: 'userId' },
+            { name: 'supportTickets', field: 'userId' },
+            { name: 'feedback', field: 'userId' },
+            { name: 'kycSubmissions', field: 'userId' },
+            { name: 'cpm_purchase_logs', field: 'userId' },
+            { name: 'activityLogs', field: 'userId' }
+        ];
+
+        for (const { name, field } of collectionsToClean) {
+            const query = db.collection(name).where(field, '==', uid);
+            const snapshot = await query.get();
+            if (!snapshot.empty) {
+                const deleteBatch = db.batch();
+                snapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                await deleteBatch.commit();
+                functions.logger.log(`Deleted user data from '${name}' for user ${uid}`);
+            }
+        }
+        
+        // Delete main user documents
+        await db.collection('cpm_coins').doc(uid).delete().catch(err => functions.logger.warn(`Could not delete cpm_coins for ${uid}:`, err.message));
+        await userDocRef.delete().catch(err => functions.logger.warn(`Could not delete main user doc for ${uid}:`, err.message));
+        functions.logger.log(`Deleted all Firestore documents for user: ${uid}`);
+
+        // --- Step 2: Delete all Storage data ---
+        const bucket = storage.bucket();
+        const storageFolders = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
+        for (const folder of storageFolders) {
+            await bucket.deleteFiles({ prefix: folder }).catch(err => {
+                 functions.logger.warn(`Failed to delete storage folder ${folder} (it may not exist):`, err.message);
+            });
+        }
+        functions.logger.log(`Deleted all storage files for user: ${uid}`);
+
+        // --- Step 3: Delete the user from Firebase Authentication ---
+        await admin.auth().deleteUser(uid);
+        functions.logger.log(`Successfully deleted user from Auth: ${uid}`);
+        
+        return { success: true, message: `Successfully deleted user ${uid} and all their data.` };
+
+    } catch (error: any) {
+         // If user is already deleted from Auth, but data cleanup failed, log it.
+        if (error.code === 'auth/user-not-found') {
+            functions.logger.warn(`Auth user ${uid} was not found, but data cleanup was attempted. The user is considered deleted.`);
+            return { success: true, message: "User was already deleted from Authentication." };
+        }
+        
+        functions.logger.error(`CRITICAL: Full deletion failed for user ${uid}:`, error);
+        throw new functions.https.HttpsError('internal', 'An unexpected error occurred during the deletion process. Check logs for details.');
+    }
+});
+
+
+/**
  * A callable function to perform a "hard reset" on a user account.
  * This wipes most of their progress data but does not delete their auth record.
  */
@@ -271,90 +368,5 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
     } catch (error: any) {
         functions.logger.error(`Error during hard reset for user ${uid}:`, error);
         throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
-    }
-});
-
-
-/**
- * A robust callable function to completely delete a user and all their associated data.
- * This is the single point of entry for deletion initiated by an admin.
- */
-export const deleteUserAccount = functions.https.onCall(async (data, context) => {
-    // 1. Admin Check
-    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
-        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
-    }
-
-    const uid = data.uid;
-    if (!uid) {
-        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a user UID.');
-    }
-
-    functions.logger.log(`Admin initiated deletion for user: ${uid}`);
-
-    // --- Perform full cleanup first ---
-    // This logic is duplicated from the onDelete trigger to ensure cleanup happens
-    // even if the trigger fails or is delayed.
-    const db = admin.firestore();
-    const storage = admin.storage();
-    const cleanupPromises: Promise<any>[] = [];
-
-    // --- 1. Firestore Cleanup ---
-    const collectionsToClean = [
-        'userPlans', 'withdrawals', 'cpmWithdrawals', 'supportTickets',
-        'feedback', 'kycSubmissions', 'cpm_purchase_logs', 'activityLogs'
-    ];
-    collectionsToClean.forEach(collectionName => {
-        const query = db.collection(collectionName).where('userId', '==', uid);
-        const promise = query.get().then(snapshot => {
-            if (!snapshot.empty) {
-                const batch = db.batch();
-                snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                return batch.commit();
-            }
-            return Promise.resolve();
-        });
-        cleanupPromises.push(promise);
-    });
-    const depositsQuery = db.collection('deposits').where('uid', '==', uid);
-    cleanupPromises.push(depositsQuery.get().then(snapshot => {
-        if (!snapshot.empty) {
-            const batch = db.batch();
-            snapshot.docs.forEach(doc => batch.delete(doc.ref));
-            return batch.commit();
-        }
-        return Promise.resolve();
-    }));
-
-    // --- 2. Storage Cleanup ---
-    const bucket = storage.bucket();
-    const userStorageFolders = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
-    userStorageFolders.forEach(folderPath => {
-        cleanupPromises.push(bucket.deleteFiles({ prefix: folderPath }).catch(err => {
-            if (err.code !== 404) functions.logger.error(`Failed to delete storage folder ${folderPath}`, err);
-        }));
-    });
-    
-    try {
-        await Promise.all(cleanupPromises);
-        functions.logger.log(`Pre-auth-deletion cleanup finished for user: ${uid}`);
-    } catch (error) {
-        functions.logger.error(`Error during pre-auth-deletion cleanup for user ${uid}:`, error);
-        // We continue to auth deletion even if cleanup fails, the onDelete trigger can be a fallback.
-    }
-
-    // --- 3. Delete from Firebase Authentication ---
-    // This will trigger the onDelete function as a final safety net.
-    try {
-        await admin.auth().deleteUser(uid);
-        functions.logger.log(`Successfully deleted user from Auth: ${uid}`);
-        return { success: true, message: `Successfully deleted user ${uid}.` };
-    } catch (error: any) {
-        if (error.code === 'auth/user-not-found') {
-            functions.logger.warn(`Auth user ${uid} was not found, but cleanup was attempted. The user is considered deleted.`);
-            return { success: true, message: "User was already deleted from Authentication." };
-        }
-        functions.logger.error(`Error deleting user ${uid} from Auth:`, error);
-        throw new functions.https.HttpsError('internal', 'Failed to delete user from authentication service after cleanup.');
     }
 });

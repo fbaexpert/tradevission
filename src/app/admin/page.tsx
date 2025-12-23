@@ -848,7 +848,7 @@ export default function AdminUsersPage() {
         await deleteUserAccount({ uid: user.id });
         toast({
             title: "User Deletion Initiated",
-            description: `${user.name}'s account is being removed. The list will update shortly.`,
+            description: `${user.name}'s account and data are being removed. The list will update shortly.`,
         });
     } catch (error: any) {
         console.error("Deletion failed:", error);
