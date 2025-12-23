@@ -20,6 +20,7 @@ import {
   Clock,
   ShieldCheck,
   KeyRound,
+  ShieldAlert,
 } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { useFirebase } from "@/lib/firebase/provider";
@@ -40,6 +41,7 @@ import { CpmCoinIcon } from "@/components/shared/cpm-coin-icon";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import Loader from "@/components/shared/loader";
+import Link from "next/link";
 
 
 interface CpmCoinOffer {
@@ -360,11 +362,26 @@ export default function PreSalePage() {
         </header>
 
         {!isEligible && eligibilityError && (
-             <Alert className="bg-yellow-500/10 border-yellow-500/30 text-yellow-300">
-                <AlertTriangle className="h-4 w-4 !text-yellow-300" />
-                <AlertTitle>Not Eligible to Purchase</AlertTitle>
-                <AlertDescription>{eligibilityError}</AlertDescription>
-            </Alert>
+            <div className="relative p-6 rounded-lg border bg-gradient-to-br from-red-900/40 via-background to-background overflow-hidden">
+                <div 
+                    className="absolute inset-0 opacity-10"
+                    style={{
+                        backgroundImage: `radial-gradient(circle at 10% 20%, hsl(var(--destructive)), transparent 70%), radial-gradient(circle at 90% 80%, hsl(var(--destructive)), transparent 70%)`
+                    }}
+                />
+                <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                    <div className="p-3 rounded-full bg-red-500/20 border border-red-500/30">
+                        <ShieldAlert className="h-10 w-10 text-red-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white">Purchase Not Available</h3>
+                        <p className="text-sm text-red-200/80 mt-1">{eligibilityError}</p>
+                        <Button asChild size="sm" variant="outline" className="mt-4 bg-transparent hover:bg-white/10 text-white">
+                            <Link href="/dashboard/plans">View Plans</Link>
+                        </Button>
+                    </div>
+                </div>
+            </div>
         )}
 
         <div className="p-6 rounded-lg bg-background/40 border border-border/30 space-y-3 max-w-3xl mx-auto">
