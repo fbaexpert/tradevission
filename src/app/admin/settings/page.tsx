@@ -40,6 +40,7 @@ import {
   Edit,
   Users,
   ShieldCheck,
+  Gamepad2,
 } from "lucide-react";
 import { useFirebase } from "@/lib/firebase/provider";
 import { Textarea } from "@/components/ui/textarea";
@@ -85,12 +86,6 @@ interface PlanTag {
 interface FooterSettings {
   supportEmail: string;
   copyrightText: string;
-}
-interface PageData {
-    id: string;
-    slug: string;
-    title: string;
-    category: string;
 }
 
 interface AdminSettings {
@@ -149,7 +144,6 @@ const defaultSettings: AdminSettings = {
 export default function AdminSettingsPage() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
-  const [pages, setPages] = useState<PageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -184,15 +178,8 @@ export default function AdminSettingsPage() {
       setLoading(false);
     });
 
-    const pagesCollectionRef = collection(db, "websitePages");
-    const unsubscribePages = onSnapshot(pagesCollectionRef, (snapshot) => {
-        const pagesData = snapshot.docs.map(doc => ({ id: doc.id, slug: doc.data().slug, title: doc.data().title, category: doc.data().category })) as PageData[];
-        setPages(pagesData);
-    });
-
     return () => {
         unsubscribeSettings();
-        unsubscribePages();
     };
   }, [db]);
 
@@ -218,21 +205,6 @@ export default function AdminSettingsPage() {
     });
   };
   
-  const handleDeletePage = async (page: PageData) => {
-    try {
-      await deletePageAction(page.id);
-      toast({
-        title: "Page Deleted",
-        description: `The "${page.title}" page has been successfully deleted.`,
-      });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: "An error occurred while deleting the page.",
-      });
-    }
-  };
 
   const handleSettingChange = (
     key: keyof AdminSettings,
@@ -394,7 +366,7 @@ export default function AdminSettingsPage() {
                         <Label className="text-base flex items-center gap-2 font-bold text-white"><ShieldCheck/> Feature Eligibility</Label>
                         <Switch checked={settings.featureEligibility.enabled} onCheckedChange={(v) => handleFeatureEligibilityChange("enabled", v)}/>
                     </div>
-                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to use features like Spin &amp; Win, Flip &amp; Win, Airdrops, or CPM Coin purchases.</p>
+                     <p className="text-sm text-muted-foreground">If enabled, users must meet one of the following criteria to use features like Spin & Win, Flip & Win, or Airdrops.</p>
                      {settings.featureEligibility.enabled && (
                         <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
                             <div className="space-y-2">
@@ -510,8 +482,7 @@ export default function AdminSettingsPage() {
           <TabsContent value="appearance" className="mt-6">
             <div className="space-y-8">
                 <div className="space-y-4 rounded-lg border p-4">
-                  <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer &amp; Policy Pages</Label>
-                  <p className="text-sm text-muted-foreground">Manage footer content and edit important pages like your privacy policy and terms of service.</p>
+                  <Label className="text-base flex items-center gap-2 font-bold text-white"><FileText/> Footer Settings</Label>
                    <div className="space-y-4 pt-4 border-t">
                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -523,55 +494,6 @@ export default function AdminSettingsPage() {
                             <Input id="footer-copyright" type="text" value={settings.footer.copyrightText} onChange={(e) => handleFooterChange("copyrightText", e.target.value)} />
                         </div>
                      </div>
-                      <div className="space-y-3 pt-4 border-t">
-                         <div className="flex justify-between items-center">
-                            <Label>Editable Pages</Label>
-                             <Button asChild variant="outline" size="sm">
-                                <Link href="/admin/pages/new">
-                                    <PlusCircle className="mr-2 h-4 w-4" /> Create New Page
-                                </Link>
-                            </Button>
-                         </div>
-                          {pages.map((page) => (
-                            <div key={page.id} className="flex items-center justify-between p-3 rounded-md bg-muted/30">
-                               <div>
-                                 <p className="font-medium text-white">{page.title}</p>
-                                 <p className="text-xs text-muted-foreground">{page.category}</p>
-                               </div>
-                               <div className="flex items-center gap-2">
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={`/admin/pages/edit/${page.id}`}>
-                                        <Edit className="mr-2 h-4 w-4" /> Edit
-                                    </Link>
-                                </Button>
-                                 <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button variant="destructive" size="icon">
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete "{page.title}"?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          This will permanently delete the page. This action cannot be undone.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => handleDeletePage(page)}
-                                          className="bg-destructive hover:bg-destructive/90"
-                                        >
-                                          Yes, Delete Page
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                               </div>
-                            </div>
-                          ))}
-                      </div>
                    </div>
                 </div>
 

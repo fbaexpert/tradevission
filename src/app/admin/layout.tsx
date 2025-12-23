@@ -18,6 +18,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   useSidebar,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
   Users,
@@ -40,6 +43,9 @@ import {
   ShieldCheck,
   Trophy,
   FileText,
+  DollarSign,
+  Contact,
+  Gamepad2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,26 +65,63 @@ import { Logo } from "@/components/shared/logo";
 
 const ADMIN_EMAIL = "ummarfarooq38990@gmail.com";
 
-const navItems = [
-  { href: "/admin", icon: Users, label: "Users" },
-  { href: "/admin/kyc", icon: ShieldCheck, label: "KYC Submissions" },
-  { href: "/admin/vip-tiers", icon: Trophy, label: "VIP Tiers" },
-  { href: "/admin/commander-rewards", icon: Star, label: "Commander Rewards" },
-  { href: "/admin/plans", icon: Package, label: "Manage Plans" },
-  { href: "/admin/user-plans", icon: Rocket, label: "User Plans" },
-  { href: "/admin/deposits", icon: ArrowDownToDot, label: "Deposits" },
-  { href: "/admin/withdrawals", icon: ArrowUpFromDot, label: "Withdrawals" },
-  { href: "/admin/cpm-withdrawals", icon: Coins, label: "CPM Withdrawals" },
-  { href: "/admin/vip-codes", icon: KeyRound, label: "VIP Codes" },
-  { href: "/admin/spin-win", icon: Star, label: "Spin & Win" },
-  { href: "/admin/flip-win", icon: FlipVertical, label: "Flip & Win" },
-  { href: "/admin/support", icon: LifeBuoy, label: "Support Tickets" },
-  { href: "/admin/maintenance-support", icon: Wrench, label: "Maintenance Support" },
-  { href: "/admin/feedback", icon: Lightbulb, label: "Feedback" },
-  { href: "/admin/notifications", icon: Bell, label: "Notifications" },
-  { href: "/admin/airdrop", icon: Gift, label: "Airdrop" },
-  { href: "/admin/activity-logs", icon: FileClock, label: "Activity Logs" },
-  { href: "/admin/settings", icon: Settings, label: "Settings" },
+const navGroups = [
+  {
+    label: "Users & Access",
+    icon: Contact,
+    items: [
+        { href: "/admin", icon: Users, label: "Users" },
+        { href: "/admin/kyc", icon: ShieldCheck, label: "KYC Submissions" },
+        { href: "/admin/vip-tiers", icon: Trophy, label: "VIP Tiers" },
+        { href: "/admin/vip-codes", icon: KeyRound, label: "VIP Codes" },
+    ],
+  },
+  {
+    label: "Financial",
+    icon: DollarSign,
+    items: [
+        { href: "/admin/deposits", icon: ArrowDownToDot, label: "Deposits" },
+        { href: "/admin/withdrawals", icon: ArrowUpFromDot, label: "Withdrawals" },
+        { href: "/admin/cpm-withdrawals", icon: Coins, label: "CPM Withdrawals" },
+        { href: "/admin/commander-rewards", icon: Star, label: "Commander Rewards" },
+    ],
+  },
+   {
+    label: "Content & Plans",
+    icon: Package,
+    items: [
+        { href: "/admin/plans", icon: Package, label: "Manage Plans" },
+        { href: "/admin/user-plans", icon: Rocket, label: "User Plans" },
+        { href: "/admin/pages/new", icon: FileText, label: "Website Pages" },
+    ],
+  },
+  {
+    label: "Games & Events",
+    icon: Gamepad2,
+    items: [
+        { href: "/admin/spin-win", icon: Star, label: "Spin & Win" },
+        { href: "/admin/flip-win", icon: FlipVertical, label: "Flip & Win" },
+        { href: "/admin/airdrop", icon: Gift, label: "Airdrop" },
+    ]
+  },
+  {
+    label: "Support & Logs",
+    icon: LifeBuoy,
+    items: [
+        { href: "/admin/support", icon: LifeBuoy, label: "Support Tickets" },
+        { href: "/admin/maintenance-support", icon: Wrench, label: "Maintenance Support" },
+        { href: "/admin/feedback", icon: Lightbulb, label: "Feedback" },
+        { href: "/admin/activity-logs", icon: FileClock, label: "Activity Logs" },
+    ]
+  },
+  {
+    label: "Configuration",
+    icon: Settings,
+    items: [
+        { href: "/admin/notifications", icon: Bell, label: "Notifications" },
+        { href: "/admin/settings", icon: Settings, label: "Settings" },
+    ]
+  }
 ];
 
 function AdminSidebarContent() {
@@ -86,23 +129,35 @@ function AdminSidebarContent() {
   const { setOpenMobile } = useSidebar();
   
   return (
-      <SidebarMenu>
-        {navItems.map((item) => (
-          <SidebarMenuItem key={item.label}>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === item.href}
-              tooltip={item.label}
-              onClick={() => setOpenMobile(false)}
-            >
-              <Link href={item.href} className="relative">
-                <item.icon />
-                <span>{item.label}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
+    <>
+      {navGroups.map((group, index) => (
+         <React.Fragment key={group.label}>
+          {index > 0 && <SidebarSeparator />}
+          <SidebarGroup>
+              <SidebarGroupLabel className="flex items-center gap-2">
+                  <group.icon size={14}/> {group.label}
+              </SidebarGroupLabel>
+              <SidebarMenu>
+                  {group.items.map((item) => (
+                  <SidebarMenuItem key={item.label}>
+                      <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.href}
+                      tooltip={item.label}
+                      onClick={() => setOpenMobile(false)}
+                      >
+                      <Link href={item.href} className="relative">
+                          <item.icon />
+                          <span>{item.label}</span>
+                      </Link>
+                      </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+          </SidebarGroup>
+         </React.Fragment>
+      ))}
+    </>
   )
 }
 
