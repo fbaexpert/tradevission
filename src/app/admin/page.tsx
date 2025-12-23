@@ -798,29 +798,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
-    if (!functions) return;
-    setIsSubmitting(true);
-    
-    const deleteUser = httpsCallable(functions, 'deleteUserAccount');
-    try {
-      await deleteUser({ uid: user.id });
-      toast({
-        title: "User Deletion Process Started",
-        description: `The account and all data for ${user.email} are being removed. The UI will update shortly.`,
-      });
-    } catch (error: any) {
-      console.error("Deletion failed:", error);
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: error.message || "An unexpected error occurred. Please check the function logs.",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleHardReset = async () => {
     if (!selectedUser || !functions) return;
 
@@ -1029,40 +1006,6 @@ export default function AdminUsersPage() {
                                   <RefreshCw className="mr-2 h-4 w-4" />
                                   Hard Reset User
                                 </DropdownMenuItem>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem
-                                      onSelect={(e) => e.preventDefault()}
-                                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                    >
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      Delete User
-                                    </DropdownMenuItem>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data from Authentication, Database, and Storage. This action is irreversible.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        disabled={isSubmitting}
-                                        onClick={() => handleDeleteUser(user)}
-                                        className="bg-destructive hover:bg-destructive/90"
-                                      >
-                                        {isSubmitting ? (
-                                           <>
-                                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                                            Deleting...
-                                           </>
-                                        ) : "Yes, Delete User"}
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
@@ -1642,3 +1585,4 @@ export default function AdminUsersPage() {
     </>
   );
 }
+

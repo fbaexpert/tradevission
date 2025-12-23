@@ -181,114 +181,6 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
 
 
 /**
- * Deletes all data associated with a user from Firestore and Storage.
- * This function is designed to be called by an admin.
- */
-export const deleteUserAccount = functions.runWith({timeoutSeconds: 300, memory: '512MB'}).https.onCall(async (data, context) => {
-    if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
-        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
-    }
-
-    const uid = data.uid;
-    if (!uid) {
-        throw new functions.https.HttpsError('invalid-argument', 'The function must be called with a "uid" argument.');
-    }
-
-    const db = admin.firestore();
-    const bucket = admin.storage().bucket();
-    const mainBatch = db.batch();
-
-    functions.logger.log(`Admin ${context.auth.uid} initiated deletion for user: ${uid}`);
-
-    // 1. Delete from Firebase Authentication
-    try {
-        await admin.auth().deleteUser(uid);
-        functions.logger.log(`Successfully deleted auth user: ${uid}`);
-    } catch (error: any) {
-        if (error.code === 'auth/user-not-found') {
-            functions.logger.warn(`Auth user ${uid} not found, but proceeding with DB cleanup.`);
-        } else {
-            functions.logger.error(`Error deleting auth user ${uid}:`, error);
-            throw new functions.https.HttpsError('internal', `Failed to delete user from authentication service: ${error.message}`);
-        }
-    }
-
-    // 2. Delete main user documents
-    mainBatch.delete(db.collection('users').doc(uid));
-    mainBatch.delete(db.collection('cpm_coins').doc(uid));
-    
-    // 3. Query and delete all related top-level documents
-    const collectionsToDelete = [
-        { name: 'userPlans', field: 'userId' },
-        { name: 'deposits', field: 'uid' },
-        { name: 'withdrawals', field: 'userId' },
-        { name: 'cpmWithdrawals', field: 'userId' },
-        { name: 'supportTickets', field: 'userId' },
-        { name: 'feedback', field: 'userId' },
-        { name: 'kycSubmissions', field: 'userId' },
-        { name: 'cpm_purchase_logs', field: 'userId' },
-        { name: 'activityLogs', field: 'userId' },
-    ];
-
-    for (const { name, field } of collectionsToDelete) {
-        try {
-            const snapshot = await db.collection(name).where(field, '==', uid).get();
-            if (!snapshot.empty) {
-                snapshot.docs.forEach(doc => mainBatch.delete(doc.ref));
-                functions.logger.log(`Added ${snapshot.size} documents from '${name}' to delete batch.`);
-            }
-        } catch(e) {
-            functions.logger.error(`Could not query collection ${name} for user ${uid}. Index might be missing.`, e);
-        }
-    }
-    
-    // 4. Commit the batched Firestore writes
-    try {
-        await mainBatch.commit();
-        functions.logger.log(`Main Firestore documents deleted for user: ${uid}`);
-    } catch (e: any) {
-        functions.logger.error(`Failed to commit main batch delete for user ${uid}.`, e);
-        throw new functions.https.HttpsError('internal', `Failed to clean up Firestore main collections: ${e.message}`);
-    }
-
-    // 5. Delete subcollections (requires separate operations)
-    const userRefForSubcollections = db.collection('users').doc(uid);
-    const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
-    for (const sub of subcollections) {
-        try {
-            const subcollectionRef = userRefForSubcollections.collection(sub);
-            const subSnapshot = await subcollectionRef.get();
-            if(!subSnapshot.empty) {
-                const subBatch = db.batch();
-                subSnapshot.docs.forEach(doc => subBatch.delete(doc.ref));
-                await subBatch.commit();
-                functions.logger.log(`Deleted ${subSnapshot.size} documents from subcollection '${sub}' for user: ${uid}`);
-            }
-        } catch (e: any) {
-             functions.logger.error(`Could not clean subcollection ${sub} for user ${uid}.`, e);
-             // We don't throw here to allow other cleanup to proceed
-        }
-    }
-
-    // 6. Delete all files from Firebase Storage
-    const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
-    for (const path of storagePaths) {
-        try {
-            await bucket.deleteFiles({ prefix: path, force: true });
-            functions.logger.log(`Storage path '${path}' cleaned for user: ${uid}`);
-        } catch(err: any) {
-            if(err.code !== 404) {
-                 functions.logger.error(`Failed to delete storage path '${path}':`, err);
-            }
-        }
-    }
-
-    functions.logger.log(`Full data cleanup completed for user: ${uid}`);
-    return { success: true, message: `Successfully deleted user ${uid} and all associated data.` };
-});
-
-
-/**
  * A callable function to perform a "hard reset" on a user account.
  * This wipes most of their progress data but does not delete their auth record.
  */
@@ -381,3 +273,4 @@ export const hardResetUser = functions.runWith({timeoutSeconds: 120, memory: '51
         throw new functions.https.HttpsError('internal', 'An error occurred during the reset process.');
     }
 });
+
