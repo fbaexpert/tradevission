@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -160,7 +161,7 @@ export default function AdminFlipWinPage() {
                     <Label className="text-lg font-bold text-white">Game Cost</Label>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="cost-usd" className="flex items-center gap-2"><DollarSign/> Cost in Points</Label>
+                            <Label htmlFor="cost-usd" className="flex items-center gap-2"><DollarSign/> Cost in balance</Label>
                             <Input
                                 id="cost-usd"
                                 type="number"
