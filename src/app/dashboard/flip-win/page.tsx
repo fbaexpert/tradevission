@@ -200,18 +200,18 @@ export default function FlipWinPage() {
                 const userRef = doc(db, "users", user.uid);
                 const userCoinRef = doc(db, "cpm_coins", user.uid);
                 
-                if (paymentMethod === 'usd') {
-                    transaction.update(userRef, { balance0: increment(-cost) });
-                } else {
-                    transaction.set(userCoinRef, { amount: increment(-cost) }, { merge: true });
-                }
+                // Get current balances inside transaction for consistency
+                const userDoc = await transaction.get(userRef);
+                const userCoinDoc = await transaction.get(userCoinRef);
+                const currentBalance = userDoc.data()?.balance0 || 0;
+                const currentCpmCoins = userCoinDoc.exists() ? userCoinDoc.data().amount : 0;
                 
+                // Determine cost and winning reward
                 const rewards = settings.rewards;
                 const totalProbability = rewards.reduce((acc, reward) => acc + (reward.probability || 0), 0);
                 let randomPoint = Math.random() * totalProbability;
                 
                 let winningReward: FlipReward | null = null;
-
                 for (let reward of rewards) {
                     if (randomPoint < (reward.probability || 0)) {
                         winningReward = reward;
@@ -219,13 +219,27 @@ export default function FlipWinPage() {
                     }
                     randomPoint -= (reward.probability || 0);
                 }
-
                 if (!winningReward) winningReward = rewards[rewards.length - 1];
 
-                 if (winningReward.type === "CASH") {
-                    transaction.update(userRef, { balance0: increment(winningReward.value) });
-                } else if (winningReward.type === "CPM_COIN") {
-                    transaction.set(userCoinRef, { amount: increment(winningReward.value) }, { merge: true });
+                // Apply cost and reward
+                if (paymentMethod === 'usd') {
+                    if (currentBalance < cost) throw new Error("Insufficient Points.");
+                    let newBalance = currentBalance - cost;
+                    if (winningReward.type === "CASH") newBalance += winningReward.value;
+                    transaction.update(userRef, { balance0: newBalance });
+                    
+                    if (winningReward.type === "CPM_COIN") {
+                        transaction.set(userCoinRef, { amount: currentCpmCoins + winningReward.value }, { merge: true });
+                    }
+                } else { // Paying with CPM
+                    if (currentCpmCoins < cost) throw new Error("Insufficient CPM Coins.");
+                    let newCpmBalance = currentCpmCoins - cost;
+                    if (winningReward.type === "CPM_COIN") newCpmBalance += winningReward.value;
+                    transaction.set(userCoinRef, { amount: newCpmBalance }, { merge: true });
+                    
+                    if (winningReward.type === "CASH") {
+                        transaction.update(userRef, { balance0: currentBalance + winningReward.value });
+                    }
                 }
                 
                 return winningReward;
