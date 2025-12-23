@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { signOut } from "firebase/auth";
 import Link from "next/link";
+import React from "react";
 import Loader from "@/components/shared/loader";
 import {
   SidebarProvider,
