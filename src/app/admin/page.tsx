@@ -802,19 +802,21 @@ export default function AdminUsersPage() {
     if (!functions) return;
     setIsSubmitting(true);
     
-    const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+    // This will call the Cloud Function to delete the user from Firebase Auth.
+    // The `onDelete` trigger will then handle all data cleanup automatically.
+    const deleteUserByAdmin = httpsCallable(functions, 'deleteUserAccount');
     try {
-      await deleteUserAccount({ uid: user.id });
+      await deleteUserByAdmin({ uid: user.id });
       toast({
         title: "User Deletion Process Started",
-        description: `The account for ${user.email} is being removed.`,
+        description: `The account for ${user.email} is being removed from Authentication. All associated data will be cleaned up automatically.`,
       });
     } catch (error: any) {
       console.error("Deletion failed:", error);
       toast({
         variant: "destructive",
         title: "Deletion Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: error.message || "An unexpected error occurred. Please check the function logs.",
       });
     } finally {
       setIsSubmitting(false);
@@ -1043,7 +1045,7 @@ export default function AdminUsersPage() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data, including from storage. This action is irreversible.
+                                        This will permanently delete <span className="font-bold text-white">{user.email}</span> and all their data from Authentication, Firestore, and Storage. This action is irreversible.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
