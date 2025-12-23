@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -94,6 +95,9 @@ export default function SpinWinPage() {
                 const data = doc.data();
                 setSettings(data.spinWinSettings || null);
                 setEligibilitySettings(data.featureEligibility || null);
+            } else {
+                // If settings don't exist, eligibility is disabled by default
+                setEligibilitySettings({ enabled: false, minPlanValue: 0, minTeamSize: 0 });
             }
         });
         
@@ -102,6 +106,8 @@ export default function SpinWinPage() {
     }, [db]);
 
     useEffect(() => {
+        if (authLoading || firebaseLoading) return;
+
         if (!user || !db) {
             setLoadingData(false);
             setEligibilityLoading(false);
@@ -112,60 +118,64 @@ export default function SpinWinPage() {
             setLoadingData(true);
             setEligibilityLoading(true);
 
-            const userRef = doc(db, "users", user.uid);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                const data = userDoc.data() as UserData;
-                setUserData(data);
-
-                if (data.lastSpinTimestamp) {
-                    const nextAvailableTime = new Date(data.lastSpinTimestamp.toMillis() + 24 * 60 * 60 * 1000);
-                    setCanSpin(new Date() >= nextAvailableTime);
-                    setNextSpinTime(new Date() < nextAvailableTime ? nextAvailableTime : null);
-                } else {
-                    setCanSpin(true);
-                }
+            try {
+                const userRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userRef);
                 
-                // Eligibility Check
-                if (eligibilitySettings && eligibilitySettings.enabled) {
-                    const teamSize = data.totalTeamMembers || 0;
-                    if (teamSize >= eligibilitySettings.minTeamSize) {
-                        setIsEligible(true);
-                        setEligibilityError(null);
+                if (userDoc.exists()) {
+                    const data = userDoc.data() as UserData;
+                    setUserData(data);
+
+                    if (data.lastSpinTimestamp) {
+                        const nextAvailableTime = new Date(data.lastSpinTimestamp.toMillis() + 24 * 60 * 60 * 1000);
+                        setCanSpin(new Date() >= nextAvailableTime);
+                        setNextSpinTime(new Date() < nextAvailableTime ? nextAvailableTime : null);
                     } else {
-                        const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
-                        const plansSnapshot = await getDocs(plansQuery);
-                        const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= eligibilitySettings.minPlanValue);
-                        
-                        if (hasEligiblePlan) {
+                        setCanSpin(true);
+                    }
+                    
+                    // Eligibility Check
+                    if (eligibilitySettings && eligibilitySettings.enabled) {
+                        const teamSize = data.totalTeamMembers || 0;
+                        if (teamSize >= eligibilitySettings.minTeamSize) {
                             setIsEligible(true);
                             setEligibilityError(null);
                         } else {
-                            setIsEligible(false);
-                            setEligibilityError(`You must have an active plan of at least $${eligibilitySettings.minPlanValue} or a team of at least ${eligibilitySettings.minTeamSize} members.`);
+                            const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
+                            const plansSnapshot = await getDocs(plansQuery);
+                            const hasEligiblePlan = plansSnapshot.docs.some(doc => doc.data().planAmount >= eligibilitySettings.minPlanValue);
+                            
+                            if (hasEligiblePlan) {
+                                setIsEligible(true);
+                                setEligibilityError(null);
+                            } else {
+                                setIsEligible(false);
+                                setEligibilityError(`You must have an active plan of at least $${eligibilitySettings.minPlanValue} or a team of at least ${eligibilitySettings.minTeamSize} members.`);
+                            }
                         }
+                    } else {
+                        setIsEligible(true); // If restrictions are off, everyone is eligible
+                        setEligibilityError(null);
                     }
-                } else {
-                    setIsEligible(true); // If restrictions are off, everyone is eligible
-                    setEligibilityError(null);
                 }
+                
+                const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
+                const plansSnapshot = await getDocs(plansQuery);
+                setHasActivePlan(!plansSnapshot.empty);
+            } catch (err) {
+                console.error("Error checking eligibility:", err);
+                setError("Could not verify your eligibility to spin.");
+            } finally {
+                setLoadingData(false);
+                setEligibilityLoading(false);
             }
-            
-            const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
-            const plansSnapshot = await getDocs(plansQuery);
-            setHasActivePlan(!plansSnapshot.empty);
-            
-            setLoadingData(false);
-            setEligibilityLoading(false);
         };
         
-        // We run this check only when eligibilitySettings is loaded
         if (eligibilitySettings !== null) {
             checkEligibilityAndData();
         }
 
-    }, [user, db, spinning, eligibilitySettings]);
+    }, [user, db, authLoading, firebaseLoading, spinning, eligibilitySettings]);
 
     const handleSpin = async () => {
         if (!user || !db || !settings || spinning) return;
