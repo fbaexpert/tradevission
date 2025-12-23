@@ -94,7 +94,7 @@ export default function SpinWinPage() {
             if (doc.exists()) {
                 const data = doc.data();
                 setSettings(data.spinWinSettings || null);
-                setEligibilitySettings(data.featureEligibility || null);
+                setEligibilitySettings(data.featureEligibility || { enabled: false, minPlanValue: 0, minTeamSize: 0 });
             } else {
                 // If settings don't exist, eligibility is disabled by default
                 setEligibilitySettings({ enabled: false, minPlanValue: 0, minTeamSize: 0 });
@@ -106,7 +106,7 @@ export default function SpinWinPage() {
     }, [db]);
 
     useEffect(() => {
-        if (authLoading || firebaseLoading) return;
+        if (authLoading || firebaseLoading || eligibilitySettings === null) return;
 
         if (!user || !db) {
             setLoadingData(false);
@@ -134,12 +134,10 @@ export default function SpinWinPage() {
                         setCanSpin(true);
                     }
                     
-                    // Eligibility Check
-                    if (eligibilitySettings && eligibilitySettings.enabled) {
+                    if (eligibilitySettings.enabled) {
                         const teamSize = data.totalTeamMembers || 0;
                         if (teamSize >= eligibilitySettings.minTeamSize) {
                             setIsEligible(true);
-                            setEligibilityError(null);
                         } else {
                             const plansQuery = query(collection(db, "userPlans"), where("userId", "==", user.uid), where("status", "==", "active"));
                             const plansSnapshot = await getDocs(plansQuery);
@@ -147,15 +145,13 @@ export default function SpinWinPage() {
                             
                             if (hasEligiblePlan) {
                                 setIsEligible(true);
-                                setEligibilityError(null);
                             } else {
                                 setIsEligible(false);
                                 setEligibilityError(`You must have an active plan of at least $${eligibilitySettings.minPlanValue} or a team of at least ${eligibilitySettings.minTeamSize} members.`);
                             }
                         }
                     } else {
-                        setIsEligible(true); // If restrictions are off, everyone is eligible
-                        setEligibilityError(null);
+                        setIsEligible(true);
                     }
                 }
                 
@@ -171,9 +167,7 @@ export default function SpinWinPage() {
             }
         };
         
-        if (eligibilitySettings !== null) {
-            checkEligibilityAndData();
-        }
+        checkEligibilityAndData();
 
     }, [user, db, authLoading, firebaseLoading, spinning, eligibilitySettings]);
 
@@ -340,3 +334,5 @@ export default function SpinWinPage() {
         </div>
     )
 }
+
+    
