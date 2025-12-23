@@ -186,7 +186,6 @@ export const changeUserPassword = functions.https.onCall(async (data, context) =
  * The `deleteUserDataOnAuthDelete` trigger will handle the rest of the cleanup.
  */
 export const deleteUserAccount = functions.https.onCall(async (data, context) => {
-    // Verify the user is an admin.
     if (context.auth?.token.email !== 'ummarfarooq38990@gmail.com') {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can delete user accounts.');
     }
@@ -201,32 +200,28 @@ export const deleteUserAccount = functions.https.onCall(async (data, context) =>
         functions.logger.log(`Admin initiated deletion for auth user: ${uid}. Cleanup will be handled by onDelete trigger.`);
         return { success: true, message: `Successfully deleted user ${uid}.` };
     } catch (error: any) {
-        functions.logger.error(`Error during admin deletion of user ${uid}:`, error);
-        // If user is already deleted from Auth, that's fine. The onDelete trigger would have already run.
         if (error.code === 'auth/user-not-found') {
-            functions.logger.warn(`Auth user ${uid} was not found. They may have already been deleted. Manual cleanup trigger might be needed if data persists.`);
-            return { success: true, message: `Auth user ${uid} not found, assumed already deleted.` };
+            functions.logger.warn(`Auth user ${uid} was not found, but proceeding to trigger manual cleanup for orphaned data.`);
+            // Manually trigger cleanup for orphaned Firestore data if auth user is already gone.
+            await cleanupFirestoreData(uid);
+            return { success: true, message: `Auth user ${uid} not found, but associated data has been cleaned up.` };
         }
+        functions.logger.error(`Error during admin deletion of user ${uid}:`, error);
         throw new functions.https.HttpsError('internal', error.message || 'A failure occurred during the account deletion process.');
     }
 });
 
-
 /**
- * Triggered when a user is deleted from Firebase Authentication.
- * Cleans up all associated data from Firestore and Storage. This is the main cleanup logic.
+ * Helper function to delete data for a user from Firestore.
  */
-export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (user) => {
-    const uid = user.uid;
-    functions.logger.log(`[AUTO-CLEANUP] Starting full data cleanup for deleted user: ${uid}`);
+async function cleanupFirestoreData(uid: string) {
     const db = admin.firestore();
-    const bucket = admin.storage().bucket();
     const batch = db.batch();
-
+    
     // 1. Delete main user documents
     batch.delete(db.collection('users').doc(uid));
     batch.delete(db.collection('cpm_coins').doc(uid));
-
+    
     // 2. Query and delete all related top-level documents
     const collectionsToDelete = [
         { name: 'userPlans', field: 'userId' },
@@ -245,24 +240,37 @@ export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (
             const snapshot = await db.collection(name).where(field, '==', uid).get();
             if (!snapshot.empty) {
                 snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                functions.logger.log(`[AUTO-CLEANUP] Found ${snapshot.size} documents in '${name}' for user ${uid} to delete.`);
             }
         } catch(e) {
-            functions.logger.error(`[AUTO-CLEANUP] Could not query collection ${name} for user ${uid}. Index might be missing.`, e);
+            functions.logger.error(`[MANUAL-CLEANUP] Could not query collection ${name} for user ${uid}. Index might be missing.`, e);
         }
     }
     
     // 3. Commit the batched Firestore writes
     try {
         await batch.commit();
-        functions.logger.log(`[AUTO-CLEANUP] Main Firestore documents deleted for user: ${uid}`);
+        functions.logger.log(`[MANUAL-CLEANUP] Main Firestore documents deleted for user: ${uid}`);
     } catch (e) {
-        functions.logger.error(`[AUTO-CLEANUP] Failed to commit main batch delete for user ${uid}.`, e);
+        functions.logger.error(`[MANUAL-CLEANUP] Failed to commit main batch delete for user ${uid}.`, e);
     }
+}
 
-    // 4. Delete subcollections (requires separate, non-batched operations for reliability)
-    const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims', 'replies'];
-    const userRef = db.collection('users').doc(uid);
+/**
+ * Triggered when a user is deleted from Firebase Authentication.
+ * Cleans up all associated data from Firestore and Storage. This is the main cleanup logic.
+ */
+export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (user) => {
+    const uid = user.uid;
+    functions.logger.log(`[AUTO-CLEANUP] Starting full data cleanup for deleted user: ${uid}`);
+    const db = admin.firestore();
+    const bucket = admin.storage().bucket();
+
+    // 1. Clean up Firestore data
+    await cleanupFirestoreData(uid);
+    
+    // 2. Delete subcollections (requires separate, non-batched operations for reliability)
+    const subcollections = ['notifications', 'vipMailbox', 'airdrop_claims'];
+    const userRef = db.collection('users').doc(uid); // Path to a doc that no longer exists, but subcollections do
     for (const sub of subcollections) {
         try {
             const subcollectionRef = userRef.collection(sub);
@@ -278,22 +286,7 @@ export const deleteUserDataOnAuthDelete = functions.auth.user().onDelete(async (
         }
     }
 
-    // Also delete replies from support tickets
-    const supportTicketsRef = db.collection('supportTickets').doc(uid);
-    try {
-        const repliesSnapshot = await supportTicketsRef.collection('replies').get();
-        if (!repliesSnapshot.empty) {
-            const repliesBatch = db.batch();
-            repliesSnapshot.docs.forEach(doc => repliesBatch.delete(doc.ref));
-            await repliesBatch.commit();
-            functions.logger.log(`[AUTO-CLEANUP] Deleted ${repliesSnapshot.size} support ticket replies for user: ${uid}`);
-        }
-    } catch(e) {
-        functions.logger.error(`[AUTO-CLEANUP] Could not clean support ticket replies for user ${uid}.`, e);
-    }
-
-
-    // 5. Delete all files from Firebase Storage
+    // 3. Delete all files from Firebase Storage
     const storagePaths = [`deposit_screenshots/${uid}`, `kyc_documents/${uid}`];
     for (const path of storagePaths) {
         try {
